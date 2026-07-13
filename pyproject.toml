@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gesture-ppt"
+version = "0.1.0"
+description = "Windows PPT 图片浏览器，第一阶段"
+requires-python = ">=3.11"
+dependencies = [
+  "PySide6>=6.6,<7",
+  "Pillow>=10.0",
+]
+
+[project.optional-dependencies]
+windows = ["pywin32>=306"]
+test = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.setuptools.packages.find]
+include = ["app*", "models*", "ppt*", "widgets*"]
