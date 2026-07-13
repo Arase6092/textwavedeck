@@ -6,8 +6,10 @@ import pytest
 from PIL import Image
 from PySide6.QtWidgets import QApplication
 
-from models.slide_project import SlidePage
+from models.slide_project import SlidePage, SlideProject
 from widgets.cylinder_carousel import CylinderCarousel
+from widgets.slide_viewer import classify_release
+from widgets.stage_workspace import StageWorkspace
 
 
 @pytest.fixture(scope="module")
@@ -53,3 +55,33 @@ def test_carousel_only_decodes_visible_thumbnails(qapp, pages):
     carousel.set_pages(pages * 25, current_index=50)
     loaded = sum(not item.pixmap.pixmap().isNull() for item in carousel._items)
     assert loaded <= 7
+
+
+def test_fit_mode_horizontal_release_requests_page_change():
+    assert classify_release(-120, 10, fit_mode=True) == "next"
+    assert classify_release(120, -8, fit_mode=True) == "previous"
+    assert classify_release(20, 2, fit_mode=True) is None
+
+
+def test_zoomed_release_never_changes_page():
+    assert classify_release(-160, 10, fit_mode=False) is None
+
+
+def test_workspace_preserves_page_when_returning_to_carousel(qapp, pages):
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    workspace = StageWorkspace()
+    workspace.set_project(project, current_index=2)
+    workspace.enter_stage(2)
+    assert workspace.mode == "stage"
+    workspace.show_carousel()
+    assert workspace.current_index == 2
+    assert workspace.mode == "carousel"
+
+
+def test_workspace_navigation_does_not_wrap(qapp, pages):
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    workspace = StageWorkspace()
+    workspace.set_project(project, current_index=0)
+    assert not workspace.previous_page()
+    assert workspace.next_page()
+    assert workspace.current_index == 1
