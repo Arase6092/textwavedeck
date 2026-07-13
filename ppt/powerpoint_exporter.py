@@ -49,7 +49,8 @@ class PowerPointExporter:
             pythoncom.CoInitialize()
             try:
                 powerpoint = win32com.client.DispatchEx("PowerPoint.Application")
-                powerpoint.Visible = False
+                # PowerPoint 2016 拒绝把 Application.Visible 设为 False；
+                # 使用 WithWindow=False 隐藏演示文稿窗口即可保持后台导出。
                 presentation = powerpoint.Presentations.Open(str(source), ReadOnly=True, WithWindow=False)
             except Exception as exc:
                 raise ExportError("无法启动或打开 Microsoft PowerPoint，请确认已安装并检查文件是否损坏或受密码保护。") from exc
