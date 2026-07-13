@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QStackedLayout, QWidget
+from PySide6.QtCore import QAbstractAnimation, QEasingCurve, QParallelAnimationGroup, QPropertyAnimation, Signal
+from PySide6.QtWidgets import QGraphicsOpacityEffect, QStackedLayout, QWidget
 
 from models.slide_project import SlidePage, SlideProject
 from widgets.cylinder_carousel import CylinderCarousel
@@ -25,11 +25,23 @@ class StageWorkspace(QWidget):
         self.viewer.setObjectName("slideViewer")
         self._stack = QStackedLayout(self)
         self._stack.setContentsMargins(0, 0, 0, 0)
+        self._stack.setStackingMode(QStackedLayout.StackingMode.StackAll)
         self._stack.addWidget(self.carousel)
         self._stack.addWidget(self.viewer)
         self._pages: list[SlidePage] = []
         self._current_index = 0
         self._mode = "carousel"
+        self._reduced_motion = False
+        self._transition_target = "carousel"
+        self._carousel_effect = QGraphicsOpacityEffect(self.carousel)
+        self._viewer_effect = QGraphicsOpacityEffect(self.viewer)
+        self._carousel_effect.setOpacity(1.0)
+        self._viewer_effect.setOpacity(0.0)
+        self.carousel.setGraphicsEffect(self._carousel_effect)
+        self.viewer.setGraphicsEffect(self._viewer_effect)
+        self.viewer.hide()
+        self._transition = QParallelAnimationGroup(self)
+        self._transition.finished.connect(self._finish_transition)
         self.carousel.current_page_changed.connect(self._on_carousel_page_changed)
         self.carousel.stage_requested.connect(self.enter_stage)
         self.viewer.previous_requested.connect(self.previous_page)
@@ -51,12 +63,25 @@ class StageWorkspace(QWidget):
     def zoom_factor(self) -> float:
         return self.viewer.zoom_factor
 
+    @property
+    def reduced_motion(self) -> bool:
+        return self._reduced_motion
+
     def set_project(self, project: SlideProject, current_index: int = 0) -> None:
         """加载项目并默认进入滚筒选页状态。"""
         self._pages = list(project.pages)
         self._current_index = self._clamp_index(current_index)
         self.carousel.set_pages(self._pages, self._current_index)
-        self._set_mode("carousel")
+        self._mode = "carousel"
+        self._finish_mode_immediately("carousel")
+
+    def set_reduced_motion(self, reduced: bool) -> None:
+        """同步滚筒与模式切换的减少动态设置。"""
+        self._reduced_motion = bool(reduced)
+        self.carousel.set_reduced_motion(self._reduced_motion)
+        if self._transition.state() == QAbstractAnimation.State.Running:
+            self._transition.stop()
+            self._finish_mode_immediately(self._mode)
 
     def select_page(self, index: int, *, animate: bool = True) -> bool:
         """选择有效页面，并让当前视图同步显示。"""
@@ -135,6 +160,55 @@ class StageWorkspace(QWidget):
     def _set_mode(self, mode: str) -> None:
         changed = self._mode != mode
         self._mode = mode
-        self._stack.setCurrentWidget(self.carousel if mode == "carousel" else self.viewer)
+        self._start_transition(mode)
         if changed:
             self.mode_changed.emit(mode)
+
+    def _start_transition(self, mode: str) -> None:
+        """用可中断的交叉淡变切换滚筒和单页舞台。"""
+        self._transition.stop()
+        self._transition.clear()
+        self._transition_target = mode
+        if self._reduced_motion:
+            self._finish_mode_immediately(mode)
+            return
+
+        target = self.carousel if mode == "carousel" else self.viewer
+        outgoing = self.viewer if mode == "carousel" else self.carousel
+        target_effect = self._carousel_effect if mode == "carousel" else self._viewer_effect
+        outgoing_effect = self._viewer_effect if mode == "carousel" else self._carousel_effect
+        target.show()
+        outgoing.show()
+        target.setEnabled(False)
+        outgoing.setEnabled(False)
+        self._stack.setCurrentWidget(target)
+
+        outgoing_animation = QPropertyAnimation(outgoing_effect, b"opacity")
+        outgoing_animation.setStartValue(outgoing_effect.opacity())
+        outgoing_animation.setEndValue(0.0)
+        outgoing_animation.setDuration(180)
+        outgoing_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        incoming_animation = QPropertyAnimation(target_effect, b"opacity")
+        incoming_animation.setStartValue(target_effect.opacity())
+        incoming_animation.setEndValue(1.0)
+        incoming_animation.setDuration(260)
+        incoming_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._transition.addAnimation(outgoing_animation)
+        self._transition.addAnimation(incoming_animation)
+        self._transition.start()
+
+    def _finish_transition(self) -> None:
+        self._finish_mode_immediately(self._transition_target)
+
+    def _finish_mode_immediately(self, mode: str) -> None:
+        target = self.carousel if mode == "carousel" else self.viewer
+        outgoing = self.viewer if mode == "carousel" else self.carousel
+        target_effect = self._carousel_effect if mode == "carousel" else self._viewer_effect
+        outgoing_effect = self._viewer_effect if mode == "carousel" else self._carousel_effect
+        target_effect.setOpacity(1.0)
+        outgoing_effect.setOpacity(0.0)
+        target.show()
+        target.setEnabled(True)
+        outgoing.hide()
+        outgoing.setEnabled(True)
+        self._stack.setCurrentWidget(target)

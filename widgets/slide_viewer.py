@@ -5,8 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, Qt, Signal
-from PySide6.QtGui import QMouseEvent, QPixmap
+from PySide6.QtGui import QColor, QMouseEvent, QPixmap
 from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView
+
+from app.theme import STAGE_BACKGROUND, STAGE_SAFE_MARGIN
 
 
 def classify_release(
@@ -37,8 +39,10 @@ class SlideViewer(QGraphicsView):
         self._fit_mode = True
         self._drag_start: QPoint | None = None
         self._press_point: QPoint | None = None
-        self.setBackgroundBrush(Qt.GlobalColor.transparent)
+        self.setBackgroundBrush(QColor(STAGE_BACKGROUND))
         self.setFrameShape(QGraphicsView.Shape.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setDragMode(QGraphicsView.DragMode.NoDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
@@ -59,8 +63,13 @@ class SlideViewer(QGraphicsView):
         if self._pixmap_item is None:
             return
         self.resetTransform()
-        self.fitInView(self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
+        bounds = self._pixmap_item.boundingRect()
+        available_width = max(1.0, self.viewport().width() - STAGE_SAFE_MARGIN * 2)
+        available_height = max(1.0, self.viewport().height() - STAGE_SAFE_MARGIN * 2)
+        factor = min(available_width / max(1.0, bounds.width()), available_height / max(1.0, bounds.height()))
+        self.scale(factor, factor)
         self._pixmap_item.setPos(0, 0)
+        self.centerOn(self._pixmap_item)
         self._zoom = 1.0
         self._set_fit_mode(True)
 

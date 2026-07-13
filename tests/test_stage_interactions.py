@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QApplication, QSplitter, QToolBar
 from app.main_window import MainWindow
 from models.slide_project import SlidePage, SlideProject
 from widgets.cylinder_carousel import CylinderCarousel
-from widgets.slide_viewer import classify_release
+from widgets.slide_viewer import SlideViewer, classify_release
 from widgets.stage_workspace import StageWorkspace
 
 
@@ -76,6 +76,37 @@ def test_fit_mode_horizontal_release_requests_page_change():
 
 def test_zoomed_release_never_changes_page():
     assert classify_release(-160, 10, fit_mode=False) is None
+
+
+def test_viewer_fit_keeps_dark_stage_margin(qapp, pages):
+    viewer = SlideViewer()
+    viewer.resize(800, 600)
+    viewer.show()
+    viewer.show_image(pages[0].image_path)
+    qapp.processEvents()
+    bounds = viewer.mapFromScene(viewer._pixmap_item.boundingRect()).boundingRect()
+    assert bounds.left() >= 30
+    assert bounds.right() <= viewer.viewport().width() - 30
+    assert bounds.top() >= 30
+    assert bounds.bottom() <= viewer.viewport().height() - 30
+    viewer.close()
+
+
+def test_workspace_propagates_reduced_motion(qapp):
+    workspace = StageWorkspace()
+    workspace.set_reduced_motion(True)
+    assert workspace.reduced_motion
+    assert workspace.carousel.reduced_motion
+
+
+def test_workspace_animates_mode_change_when_motion_is_enabled(qapp, pages):
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    workspace = StageWorkspace()
+    workspace.set_project(project, current_index=1)
+    workspace.enter_stage(1)
+    assert workspace.mode == "stage"
+    assert workspace._transition.state() == QAbstractAnimation.State.Running
+    workspace._transition.stop()
 
 
 def test_workspace_preserves_page_when_returning_to_carousel(qapp, pages):
