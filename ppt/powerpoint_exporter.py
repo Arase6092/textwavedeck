@@ -28,6 +28,20 @@ def calculate_export_size(slide_width: float, slide_height: float) -> tuple[int,
     return EXPORT_WIDTH, max(1, round(EXPORT_WIDTH * slide_height / slide_width))
 
 
+def _close_powerpoint(presentation, powerpoint) -> None:
+    """分别关闭演示文稿和应用，确保前一步失败不阻断后续清理。"""
+    if presentation is not None:
+        try:
+            presentation.Close()
+        except Exception:
+            LOGGER.exception("关闭 PowerPoint 演示文稿时发生异常")
+    if powerpoint is not None:
+        try:
+            powerpoint.Quit()
+        except Exception:
+            LOGGER.exception("关闭 PowerPoint 应用进程时发生异常")
+
+
 class PowerPointExporter:
     """使用 PowerPoint COM 将每页导出为 PNG。"""
 
@@ -121,13 +135,7 @@ class PowerPointExporter:
             LOGGER.exception("PPT 导出异常：%s", source)
             raise ExportError(f"导出失败：{exc}") from exc
         finally:
-            try:
-                if presentation is not None:
-                    presentation.Close()
-                if powerpoint is not None:
-                    powerpoint.Quit()
-            except Exception:
-                LOGGER.exception("关闭 PowerPoint 进程时发生异常")
+            _close_powerpoint(presentation, powerpoint)
             try:
                 import pythoncom
                 pythoncom.CoUninitialize()

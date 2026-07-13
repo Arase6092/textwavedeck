@@ -14,6 +14,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from ppt.importer import PPTImporter
+from ppt.powerpoint_exporter import _close_powerpoint
 
 
 def create_sample_presentation(path: Path, width: float, height: float) -> None:
@@ -30,10 +31,7 @@ def create_sample_presentation(path: Path, width: float, height: float) -> None:
         text_box.TextFrame.TextRange.Text = "手势控制 PPT 集成测试"
         presentation.SaveAs(str(path), 24)  # 24 = ppSaveAsOpenXMLPresentation
     finally:
-        if presentation is not None:
-            presentation.Close()
-        if powerpoint is not None:
-            powerpoint.Quit()
+        _close_powerpoint(presentation, powerpoint)
         pythoncom.CoUninitialize()
 
 
