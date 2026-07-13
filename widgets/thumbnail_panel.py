@@ -24,6 +24,8 @@ class ThumbnailPanel(QListWidget):
 
     def set_pages(self, pages) -> None:
         """重建缩略图列表并显示页码。"""
+        # 批量重建时暂时屏蔽行变化信号，避免恢复页码被默认第 1 页覆盖。
+        self.blockSignals(True)
         self.clear()
         for page in pages:
             item = QListWidgetItem(QIcon(QPixmap(page.thumbnail_path)), f"第 {page.index + 1:02d} 页")
@@ -32,6 +34,7 @@ class ThumbnailPanel(QListWidget):
             self.addItem(item)
         if self.count():
             self.setCurrentRow(0)
+        self.blockSignals(False)
 
     def select_page(self, index: int) -> None:
         """选中指定页面并滚动到可见区域。"""

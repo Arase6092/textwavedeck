@@ -204,8 +204,8 @@ class MainWindow(QMainWindow):
         """显示导入结果并恢复当前页。"""
         self.project = result.project
         self.state.set_page_count(self.project.slide_count)
-        self.state.current_page = self.project.current_slide
         self.thumbnails.set_pages(self.project.pages)
+        self.state.current_page = max(0, min(self.project.current_slide, self.state.page_count - 1))
         self.thumbnails.select_page(self.state.current_page)
         self._show_current_page()
         self.page_counter.setText(f"第 {self.state.current_page + 1} / {self.state.page_count} 页  |  {'缓存命中' if result.cache_hit else '已导出'}")
