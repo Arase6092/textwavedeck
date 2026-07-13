@@ -147,6 +147,7 @@ def test_main_window_uses_overlay_dark_chrome(qapp, monkeypatch, tmp_path):
     assert window.bottom_bar.parent() is window.stage_root
     assert window.content_stack.geometry() == window.stage_root.rect()
     assert "#07080B" in window.styleSheet()
+    assert all(widget.isHidden() for widget in window.zoom_widgets)
     window.close()
 
 

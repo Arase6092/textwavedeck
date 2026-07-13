@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QPainter, QPixmap
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -20,33 +20,19 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QStackedWidget,
-    QStyle,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from app.commands import NavigationState
-from app.theme import PRIMARY_TEXT, application_stylesheet, reduced_motion_enabled
+from app.theme import application_stylesheet, line_icon, reduced_motion_enabled
 from app.workers import ImportWorker
 from models.slide_project import SlideProject
 from ppt.importer import PPTImporter
 from ppt.project_store import project_dir, save_project
 from widgets.stage_chrome import StageChrome
 from widgets.stage_workspace import StageWorkspace
-
-
-def _tinted_standard_icon(style: QStyle, standard_pixmap: QStyle.StandardPixmap, color: str = PRIMARY_TEXT) -> QIcon:
-    """将系统图标统一处理为适合暗场的单色图标。"""
-    source = style.standardIcon(standard_pixmap).pixmap(18, 18)
-    target = QPixmap(source.size())
-    target.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(target)
-    painter.drawPixmap(0, 0, source)
-    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-    painter.fillRect(target.rect(), QColor(color))
-    painter.end()
-    return QIcon(target)
 
 
 class MainWindow(QMainWindow):
@@ -90,12 +76,14 @@ class MainWindow(QMainWindow):
         )
         self.workspace.set_reduced_motion(self.reduced_motion)
         self._set_project_controls_enabled(False)
+        for widget in self.zoom_widgets:
+            widget.hide()
         self._update_project_name()
 
     def _create_actions(self) -> None:
         """创建快捷键和覆盖层按钮共享的命令。"""
         self.open_action = QAction("打开", self)
-        self.open_action.setIcon(_tinted_standard_icon(self.style(), QStyle.StandardPixmap.SP_DialogOpenButton))
+        self.open_action.setIcon(line_icon("open"))
         self.open_action.setToolTip("打开 PPT（Ctrl+O）")
         self.open_action.setShortcut(QKeySequence("Ctrl+O"))
         self.open_action.triggered.connect(self.open_file)
@@ -109,7 +97,7 @@ class MainWindow(QMainWindow):
         self.next_action.triggered.connect(self.next_page)
 
         self.fullscreen_action = QAction("全屏", self)
-        self.fullscreen_action.setIcon(_tinted_standard_icon(self.style(), QStyle.StandardPixmap.SP_TitleBarMaxButton))
+        self.fullscreen_action.setIcon(line_icon("fullscreen"))
         self.fullscreen_action.setToolTip("进入或退出全屏（F11）")
         self.fullscreen_action.setShortcut(QKeySequence("F11"))
         self.fullscreen_action.triggered.connect(self.toggle_fullscreen)
@@ -160,6 +148,7 @@ class MainWindow(QMainWindow):
         layout.setColumnStretch(2, 1)
 
         left = QWidget(bar)
+        left.setObjectName("chromeGroup")
         left_layout = QHBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(10)
@@ -179,13 +168,14 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.folio, 0, 1)
 
         right = QWidget(bar)
+        right.setObjectName("chromeGroup")
         right_layout = QHBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(4)
         right_layout.addStretch(1)
         self.mode_button = QToolButton()
         self.mode_button.setFixedSize(40, 40)
-        self.mode_button.setIcon(_tinted_standard_icon(self.style(), QStyle.StandardPixmap.SP_FileDialogListView))
+        self.mode_button.setIcon(line_icon("stage"))
         self.mode_button.setToolTip("进入单页舞台")
         self.mode_button.clicked.connect(self.toggle_workspace_mode)
         right_layout.addWidget(self.mode_button)
@@ -399,6 +389,7 @@ class MainWindow(QMainWindow):
 
     def _on_workspace_mode_changed(self, mode: str) -> None:
         is_stage = mode == "stage"
+        self.mode_button.setIcon(line_icon("grid" if is_stage else "stage"))
         self.mode_button.setToolTip("返回页面滚筒" if is_stage else "进入单页舞台")
         self.status_label.setText("单页舞台" if is_stage else "页面滚筒")
         for action in (self.zoom_out_action, self.reset_action, self.zoom_in_action, self.fit_action):

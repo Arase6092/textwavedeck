@@ -1,4 +1,25 @@
-from app.theme import FOCUS_BLUE, STAGE_BACKGROUND, application_stylesheet, reduced_motion_enabled
+import os
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+import pytest
+from PySide6.QtWidgets import QApplication
+
+from app.theme import (
+    BOTTOM_CHROME_HEIGHT,
+    FOCUS_BLUE,
+    STAGE_BACKGROUND,
+    STAGE_SAFE_MARGIN,
+    application_stylesheet,
+    line_icon,
+    reduced_motion_enabled,
+)
+
+
+@pytest.fixture(scope="module")
+def qapp():
+    app = QApplication.instance() or QApplication([])
+    yield app
 
 
 def test_dark_theme_exposes_approved_tokens():
@@ -8,6 +29,19 @@ def test_dark_theme_exposes_approved_tokens():
     assert "#07080B" in stylesheet
     assert "#3B6FFF" in stylesheet
     assert "Segoe UI Variable" in stylesheet
+
+
+def test_chrome_children_are_transparent_and_stage_clears_bottom_bar():
+    stylesheet = application_stylesheet()
+    assert "QWidget#chromeGroup" in stylesheet
+    assert STAGE_SAFE_MARGIN >= BOTTOM_CHROME_HEIGHT
+
+
+@pytest.mark.parametrize("name", ["open", "grid", "fullscreen"])
+def test_line_icons_keep_transparent_space(qapp, name):
+    image = line_icon(name).pixmap(18, 18).toImage()
+    opaque = sum(image.pixelColor(x, y).alpha() > 0 for y in range(image.height()) for x in range(image.width()))
+    assert 10 < opaque < 180
 
 
 def test_reduced_motion_can_be_forced_by_environment(monkeypatch):

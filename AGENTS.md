@@ -33,6 +33,8 @@
 - 2026-07-13 | `PowerPointExporter.export` | PowerPoint 2016 报错“不允许隐藏应用程序窗口” | COM 不允许设置 `Application.Visible=False` | 保留独立 `DispatchEx` 实例默认可见性，仅通过 `Presentations.Open(..., WithWindow=False)` 隐藏演示文稿窗口。
 - 2026-07-13 | `pip install -r requirements.txt` | 默认 PyPI 下载 PySide6 长时间无输出 | 当前网络对 `files.pythonhosted.org` 大文件传输不稳定 | 改用 `https://pypi.tuna.tsinghua.edu.cn/simple` 镜像，本次约 28 秒完成全部依赖安装。
 - 2026-07-13 | PowerPoint COM 清理 | `Presentation.Close()` 偶发失败后残留 PowerPoint 进程和锁文件 | `Close()` 与 `Quit()` 位于同一 `try`，前者抛错会跳过后者 | 每个 COM 清理步骤必须独立捕获异常，确保 `Application.Quit()` 和 `CoUninitialize()` 始终继续执行。
+- 2026-07-14 | 暗场视觉实施计划 | 验证命令引用不存在的 `tests/test_slide_navigation.py` | 计划沿用了第一阶段文档中的旧测试文件名 | 执行计划前先用 `rg --files tests` 核对实际测试文件；本项目导航与舞台交互回归使用 `tests/test_stage_interactions.py`。
+- 2026-07-14 | 功能工作树回顾阶段方案 | 工作树中找不到 `第一阶段执行方案.md` | 该阶段方案只保留在项目根目录，没有被 Git 跟踪到功能工作树 | 从项目根目录读取阶段方案，从功能工作树读取实施计划和代码，不在工作树中硬编码查找未跟踪文档。
 
 ## 交付前检查
 
