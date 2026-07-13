@@ -11,7 +11,7 @@ from typing import Callable
 
 from PIL import Image
 
-from models.slide_project import SlidePage, SlideProject
+from models.slide_project import EXPORT_WIDTH, RENDER_PROFILE, THUMBNAIL_WIDTH, SlidePage, SlideProject
 from ppt.project_store import calculate_cache_key, save_project
 
 LOGGER = logging.getLogger(__name__)
@@ -19,6 +19,13 @@ LOGGER = logging.getLogger(__name__)
 
 class ExportError(RuntimeError):
     """导出失败时向界面传递的中文异常。"""
+
+
+def calculate_export_size(slide_width: float, slide_height: float) -> tuple[int, int]:
+    """根据 PowerPoint 页面比例计算保持比例的 4K 导出尺寸。"""
+    if slide_width <= 0 or slide_height <= 0:
+        raise ExportError("无法读取 PowerPoint 页面比例。")
+    return EXPORT_WIDTH, max(1, round(EXPORT_WIDTH * slide_height / slide_width))
 
 
 class PowerPointExporter:
@@ -61,6 +68,11 @@ class PowerPointExporter:
             count = int(presentation.Slides.Count)
             if count <= 0:
                 raise ExportError("演示文稿没有可导出的页面。")
+            export_width, export_height = calculate_export_size(
+                float(presentation.PageSetup.SlideWidth),
+                float(presentation.PageSetup.SlideHeight),
+            )
+            thumbnail_height = max(1, round(THUMBNAIL_WIDTH * export_height / export_width))
             if progress:
                 progress(5, f"正在导出 {count} 页")
             pages: list[SlidePage] = []
@@ -68,15 +80,15 @@ class PowerPointExporter:
                 if is_cancelled and is_cancelled():
                     raise ExportError("用户已取消导入。")
                 raw = temporary / f"raw_{index:03d}.png"
-                presentation.Slides(index).Export(str(raw), "PNG", 1920, 1080)
+                presentation.Slides(index).Export(str(raw), "PNG", export_width, export_height)
                 image_path = slides_dir / f"slide_{index:03d}.png"
                 thumbnail_path = thumbnails_dir / f"slide_{index:03d}.jpg"
                 raw.replace(image_path)
                 with Image.open(image_path) as image:
                     image.load()
                     thumb = image.convert("RGB")
-                    thumb.thumbnail((240, 135), Image.Resampling.LANCZOS)
-                    thumb.save(thumbnail_path, "JPEG", quality=88, optimize=True)
+                    thumb.thumbnail((THUMBNAIL_WIDTH, thumbnail_height), Image.Resampling.LANCZOS)
+                    thumb.save(thumbnail_path, "JPEG", quality=90, optimize=True)
                 pages.append(SlidePage(index=index - 1, image_path=str(image_path), thumbnail_path=str(thumbnail_path)))
                 if progress:
                     progress(5 + int(index / count * 90), f"已导出第 {index} / {count} 页")
@@ -85,6 +97,10 @@ class PowerPointExporter:
                 cache_key=calculate_cache_key(source),
                 source_size=source_size,
                 source_modified_at=source_modified_at,
+                export_width=export_width,
+                export_height=export_height,
+                render_profile=RENDER_PROFILE,
+                thumbnail_width=THUMBNAIL_WIDTH,
                 pages=pages,
             )
             if target_dir.exists():
