@@ -3,6 +3,8 @@ import os
 import time
 from pathlib import Path
 
+from PIL import Image
+
 from models.slide_project import SlidePage, SlideProject
 from ppt.project_store import calculate_cache_key, is_cache_valid, load_project, save_project
 
@@ -11,6 +13,33 @@ def _make_source(tmp_path: Path) -> Path:
     source = tmp_path / "演示 文稿.pptx"
     source.write_bytes(b"ppt-fixture")
     return source
+
+
+def _write_image(path: Path, size: tuple[int, int], format_name: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", size, "white").save(path, format_name)
+
+
+def _valid_project(tmp_path: Path) -> tuple[Path, Path, SlideProject]:
+    source = _make_source(tmp_path)
+    cache = tmp_path / "cache"
+    slide = cache / "slides" / "slide_001.png"
+    thumb = cache / "thumbnails" / "slide_001.jpg"
+    _write_image(slide, (3840, 2160), "PNG")
+    _write_image(thumb, (640, 360), "JPEG")
+    stat = source.stat()
+    project = SlideProject(
+        source_path=str(source.resolve()),
+        cache_key=calculate_cache_key(source),
+        source_size=stat.st_size,
+        source_modified_at=stat.st_mtime,
+        export_width=3840,
+        export_height=2160,
+        render_profile="powerpoint-4k-v1",
+        thumbnail_width=640,
+        pages=[SlidePage(0, str(slide), str(thumb))],
+    )
+    return source, cache, project
 
 
 def test_cache_key_changes_when_source_changes(tmp_path):
@@ -23,27 +52,31 @@ def test_cache_key_changes_when_source_changes(tmp_path):
 
 
 def test_project_round_trip_and_cache_validation(tmp_path):
-    source = _make_source(tmp_path)
-    cache = tmp_path / "cache"
-    slide = cache / "slides" / "slide_001.png"
-    thumb = cache / "thumbnails" / "slide_001.jpg"
-    slide.parent.mkdir(parents=True)
-    thumb.parent.mkdir(parents=True)
-    slide.write_bytes(b"png")
-    thumb.write_bytes(b"jpg")
-    stat = source.stat()
-    project = SlideProject(
-        source_path=str(source.resolve()),
-        cache_key=calculate_cache_key(source),
-        source_size=stat.st_size,
-        source_modified_at=stat.st_mtime,
-        pages=[SlidePage(0, str(slide), str(thumb))],
-    )
+    source, cache, project = _valid_project(tmp_path)
     save_project(project, cache)
     restored = load_project(cache)
     assert restored.slide_count == 1
     assert is_cache_valid(cache, source)
+
+
+def test_schema_one_cache_is_invalid(tmp_path):
+    source, cache, project = _valid_project(tmp_path)
+    project.schema_version = 1
+    save_project(project, cache)
+    assert not is_cache_valid(cache, source)
+
+
+def test_schema_two_requires_render_profile(tmp_path):
+    source, cache, project = _valid_project(tmp_path)
+    save_project(project, cache)
     data = json.loads((cache / "project.json").read_text(encoding="utf-8"))
-    data["schema_version"] = 99
+    data["render_profile"] = "legacy-1080p"
     (cache / "project.json").write_text(json.dumps(data), encoding="utf-8")
+    assert not is_cache_valid(cache, source)
+
+
+def test_cache_rejects_wrong_image_dimensions(tmp_path):
+    source, cache, project = _valid_project(tmp_path)
+    save_project(project, cache)
+    _write_image(Path(project.pages[0].image_path), (1920, 1080), "PNG")
     assert not is_cache_valid(cache, source)

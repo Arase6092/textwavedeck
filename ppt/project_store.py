@@ -8,7 +8,16 @@ import os
 import shutil
 from pathlib import Path
 
-from models.slide_project import SlideProject, source_signature
+from PIL import Image
+
+from models.slide_project import (
+    EXPORT_WIDTH,
+    RENDER_PROFILE,
+    SCHEMA_VERSION,
+    THUMBNAIL_WIDTH,
+    SlideProject,
+    source_signature,
+)
 
 
 def cache_root() -> Path:
@@ -51,7 +60,13 @@ def is_cache_valid(directory: Path, source_path: str | Path) -> bool:
         metadata = json.loads((directory / "project.json").read_text(encoding="utf-8"))
         project = SlideProject.from_dict(metadata)
         size, modified = source_signature(source)
-        if project.schema_version != 1 or project.source_path != str(source):
+        if project.schema_version != SCHEMA_VERSION or project.source_path != str(source):
+            return False
+        if project.render_profile != RENDER_PROFILE:
+            return False
+        if project.export_width != EXPORT_WIDTH or project.export_height <= 0:
+            return False
+        if project.thumbnail_width != THUMBNAIL_WIDTH:
             return False
         if project.source_size != size or abs(project.source_modified_at - modified) > 1e-3:
             return False
@@ -61,7 +76,21 @@ def is_cache_valid(directory: Path, source_path: str | Path) -> bool:
             return False
         if [page.index for page in project.pages] != list(range(project.slide_count)):
             return False
-        return all(Path(page.image_path).is_file() and Path(page.thumbnail_path).is_file() for page in project.pages)
+        for page in project.pages:
+            image_path = Path(page.image_path)
+            thumbnail_path = Path(page.thumbnail_path)
+            if not image_path.is_file() or not thumbnail_path.is_file():
+                return False
+            with Image.open(image_path) as image:
+                if image.size != (project.export_width, project.export_height):
+                    return False
+                image.verify()
+            with Image.open(thumbnail_path) as thumbnail:
+                width, height = thumbnail.size
+                if width <= 0 or height <= 0 or width > project.thumbnail_width:
+                    return False
+                thumbnail.verify()
+        return True
     except (OSError, KeyError, ValueError, json.JSONDecodeError):
         return False
 

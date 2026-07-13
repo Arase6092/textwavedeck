@@ -7,6 +7,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+SCHEMA_VERSION = 2
+RENDER_PROFILE = "powerpoint-4k-v1"
+EXPORT_WIDTH = 3840
+THUMBNAIL_WIDTH = 640
+
 
 @dataclass(slots=True)
 class SlidePage:
@@ -34,12 +39,14 @@ class SlideProject:
     cache_key: str
     source_size: int
     source_modified_at: float
-    export_width: int = 1920
-    export_height: int = 1080
+    export_width: int = EXPORT_WIDTH
+    export_height: int = 2160
+    render_profile: str = RENDER_PROFILE
+    thumbnail_width: int = THUMBNAIL_WIDTH
     current_slide: int = 0
     pages: list[SlidePage] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    schema_version: int = 1
+    schema_version: int = SCHEMA_VERSION
 
     @property
     def slide_count(self) -> int:
@@ -58,6 +65,8 @@ class SlideProject:
             "current_slide": self.current_slide,
             "export_width": self.export_width,
             "export_height": self.export_height,
+            "render_profile": self.render_profile,
+            "thumbnail_width": self.thumbnail_width,
             "created_at": self.created_at,
             "pages": [page.to_dict() for page in self.pages],
         }
@@ -73,6 +82,8 @@ class SlideProject:
             source_modified_at=float(data["source_modified_at"]),
             export_width=int(data.get("export_width", 1920)),
             export_height=int(data.get("export_height", 1080)),
+            render_profile=str(data.get("render_profile", "")),
+            thumbnail_width=int(data.get("thumbnail_width", 0)),
             current_slide=int(data.get("current_slide", 0)),
             pages=pages,
             created_at=str(data.get("created_at", "")),
