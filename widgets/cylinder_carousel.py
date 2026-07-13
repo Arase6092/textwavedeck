@@ -75,7 +75,7 @@ class CylinderCarousel(QGraphicsView):
             label = QGraphicsSimpleTextItem(f"{page.index + 1:02d}", root)
             label.setBrush(QColor("#002fa7"))
             label.setFont(QFont("Segoe UI", 12, QFont.Weight.DemiBold))
-            label.setPos(-320, 188)
+            label.setPos(-306, -166)
             self.scene().addItem(root)
             self._items.append(_CarouselItem(root, pixmap, label))
         self._current_index = snap_index(float(current_index), len(self._pages))
@@ -120,7 +120,7 @@ class CylinderCarousel(QGraphicsView):
         item.pixmap.setPixmap(pixmap)
         item.pixmap.setOffset(-width / 2, -height / 2)
         item.pixmap.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
-        item.label.setPos(-width / 2, height / 2 + 8)
+        item.label.setPos(-width / 2 + 14, -height / 2 + 10)
 
     def _layout_items(self) -> None:
         if not self._items:
@@ -145,7 +145,8 @@ class CylinderCarousel(QGraphicsView):
                 base_scale * pose.scale,
             )
             item.root.setTransform(transform)
-            item.root.setPos(center_x + pose.x_factor * radius, center_y)
+            depth_drop = (1.0 - pose.scale) * 110.0
+            item.root.setPos(center_x + pose.x_factor * radius, center_y + depth_drop)
             item.root.setOpacity(pose.opacity)
             item.root.setZValue(pose.z_value)
             pen = QPen(QColor("#002fa7") if abs(relative) < 0.5 else QColor("#c7ccd4"))

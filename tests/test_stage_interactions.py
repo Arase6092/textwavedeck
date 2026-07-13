@@ -4,8 +4,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PIL import Image
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QSplitter, QToolBar
 
+from app.main_window import MainWindow
 from models.slide_project import SlidePage, SlideProject
 from widgets.cylinder_carousel import CylinderCarousel
 from widgets.slide_viewer import classify_release
@@ -85,3 +86,12 @@ def test_workspace_navigation_does_not_wrap(qapp, pages):
     assert not workspace.previous_page()
     assert workspace.next_page()
     assert workspace.current_index == 1
+
+
+def test_main_window_uses_full_stage_without_sidebar_or_toolbar(qapp, monkeypatch, tmp_path):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    assert isinstance(window.workspace, StageWorkspace)
+    assert window.findChildren(QSplitter) == []
+    assert window.findChildren(QToolBar) == []
+    window.close()

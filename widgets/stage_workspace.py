@@ -69,6 +69,7 @@ class StageWorkspace(QWidget):
             self.carousel.select_page(target, animate=animate)
         else:
             self.viewer.show_image(self._pages[target].image_path)
+            self.zoom_changed.emit(self.viewer.zoom_factor)
         if changed:
             self.page_changed.emit(target)
         return changed
@@ -94,6 +95,7 @@ class StageWorkspace(QWidget):
         self.viewer.show_image(self._pages[self._current_index].image_path)
         self._set_mode("stage")
         self.page_changed.emit(self._current_index)
+        self.zoom_changed.emit(self.viewer.zoom_factor)
 
     def show_carousel(self) -> None:
         """返回滚筒并保持当前页面位于中央。"""
