@@ -136,3 +136,26 @@ def test_main_window_uses_full_stage_without_sidebar_or_toolbar(qapp, monkeypatc
     assert window.findChildren(QSplitter) == []
     assert window.findChildren(QToolBar) == []
     window.close()
+
+
+def test_main_window_uses_overlay_dark_chrome(qapp, monkeypatch, tmp_path):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    window.show()
+    qapp.processEvents()
+    assert window.top_bar.parent() is window.stage_root
+    assert window.bottom_bar.parent() is window.stage_root
+    assert window.content_stack.geometry() == window.stage_root.rect()
+    assert "#07080B" in window.styleSheet()
+    window.close()
+
+
+def test_import_locks_chrome_visible(qapp, monkeypatch, tmp_path):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    window._set_importing_ui(True)
+    assert window.chrome.locked
+    assert not window.bottom_bar.isHidden()
+    window._set_importing_ui(False)
+    assert not window.chrome.locked
+    window.close()

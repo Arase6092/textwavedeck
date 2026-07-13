@@ -1,4 +1,4 @@
-"""圆柱滚筒舞台主窗口和 Qt 命令绑定。"""
+"""黑匣子剧场主窗口和 Qt 命令绑定。"""
 
 from __future__ import annotations
 
@@ -6,17 +6,19 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QStackedWidget,
     QStyle,
     QToolButton,
@@ -25,15 +27,30 @@ from PySide6.QtWidgets import (
 )
 
 from app.commands import NavigationState
+from app.theme import PRIMARY_TEXT, application_stylesheet, reduced_motion_enabled
 from app.workers import ImportWorker
 from models.slide_project import SlideProject
 from ppt.importer import PPTImporter
 from ppt.project_store import project_dir, save_project
+from widgets.stage_chrome import StageChrome
 from widgets.stage_workspace import StageWorkspace
 
 
+def _tinted_standard_icon(style: QStyle, standard_pixmap: QStyle.StandardPixmap, color: str = PRIMARY_TEXT) -> QIcon:
+    """将系统图标统一处理为适合暗场的单色图标。"""
+    source = style.standardIcon(standard_pixmap).pixmap(18, 18)
+    target = QPixmap(source.size())
+    target.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(target)
+    painter.drawPixmap(0, 0, source)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(target.rect(), QColor(color))
+    painter.end()
+    return QIcon(target)
+
+
 class MainWindow(QMainWindow):
-    """以整窗圆柱滚筒和单页舞台为主体的浏览窗口。"""
+    """以暗场滚筒和自动隐藏覆盖层为主体的浏览窗口。"""
 
     def __init__(self) -> None:
         super().__init__()
@@ -44,130 +61,60 @@ class MainWindow(QMainWindow):
         self.project: SlideProject | None = None
         self.worker: ImportWorker | None = None
         self.importer = PPTImporter()
+        self.reduced_motion = reduced_motion_enabled()
+        self._importing = False
         self._build_ui()
         self._restore_last_project()
 
     def _build_ui(self) -> None:
-        """构建 Swiss 风格边缘控制和整窗舞台。"""
-        self.setStyleSheet(
-            """
-            QMainWindow, QWidget {
-                background: #f7f7f8;
-                color: #20242b;
-                font-family: 'Segoe UI';
-                letter-spacing: 0px;
-            }
-            QFrame#edgeBar {
-                background: #ffffff;
-                border: 0;
-                border-bottom: 1px solid #d9dde3;
-            }
-            QFrame#statusStrip {
-                background: #ffffff;
-                border: 0;
-                border-top: 1px solid #d9dde3;
-            }
-            QFrame#separator {
-                background: #d9dde3;
-                min-width: 1px;
-                max-width: 1px;
-            }
-            QToolButton, QPushButton {
-                background: #ffffff;
-                color: #20242b;
-                border: 1px solid #d9dde3;
-                border-radius: 2px;
-                padding: 6px 10px;
-            }
-            QToolButton:hover, QPushButton:hover {
-                color: #002fa7;
-                border-color: #002fa7;
-            }
-            QToolButton:pressed, QPushButton:pressed {
-                background: #f0f3fa;
-            }
-            QToolButton:disabled, QPushButton:disabled {
-                color: #a7adb7;
-                border-color: #e7e9ed;
-            }
-            QLabel#folio {
-                color: #002fa7;
-                font-size: 20px;
-                font-weight: 700;
-                padding: 0 14px;
-            }
-            QLabel#emptyFolio {
-                color: #002fa7;
-                font-size: 82px;
-                font-weight: 700;
-            }
-            QLabel#emptyTitle {
-                color: #20242b;
-                font-size: 23px;
-                font-weight: 600;
-            }
-            QLabel#statusLabel {
-                color: #5d6470;
-                font-size: 12px;
-            }
-            QProgressBar {
-                border: 0;
-                background: #e4e7eb;
-                height: 6px;
-                text-align: center;
-            }
-            QProgressBar::chunk { background: #002fa7; }
-            QGraphicsView#cylinderCarousel {
-                background: #f7f7f8;
-                border: 0;
-            }
-            QGraphicsView#slideViewer {
-                background: #e9ebee;
-                border: 0;
-            }
-            """
-        )
+        """构建完整暗场、舞台内容和覆盖式控制层。"""
+        self.setStyleSheet(application_stylesheet())
         self._create_actions()
-        root = QWidget()
-        root_layout = QVBoxLayout(root)
+
+        self.stage_root = QWidget()
+        self.stage_root.setObjectName("stageRoot")
+        root_layout = QVBoxLayout(self.stage_root)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
-        self.edge_bar = self._create_edge_bar()
         self.content_stack = self._create_content()
-        self.status_strip = self._create_status_strip()
-        root_layout.addWidget(self.edge_bar)
-        root_layout.addWidget(self.content_stack, 1)
-        root_layout.addWidget(self.status_strip)
-        self.setCentralWidget(root)
+        root_layout.addWidget(self.content_stack)
+        self.setCentralWidget(self.stage_root)
+
+        self.top_bar = self._create_top_bar(self.stage_root)
+        self.bottom_bar = self._create_bottom_bar(self.stage_root)
+        self.chrome = StageChrome(
+            self.stage_root,
+            self.top_bar,
+            self.bottom_bar,
+            reduced_motion=self.reduced_motion,
+        )
+        self.workspace.set_reduced_motion(self.reduced_motion)
         self._set_project_controls_enabled(False)
+        self._update_project_name()
 
     def _create_actions(self) -> None:
-        """创建快捷键和边缘按钮共享的命令。"""
+        """创建快捷键和覆盖层按钮共享的命令。"""
         self.open_action = QAction("打开", self)
-        self.open_action.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton))
+        self.open_action.setIcon(_tinted_standard_icon(self.style(), QStyle.StandardPixmap.SP_DialogOpenButton))
         self.open_action.setToolTip("打开 PPT（Ctrl+O）")
         self.open_action.setShortcut(QKeySequence("Ctrl+O"))
         self.open_action.triggered.connect(self.open_file)
 
         self.previous_action = QAction("上一页", self)
-        self.previous_action.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowLeft))
-        self.previous_action.setToolTip("上一页（PageUp / Left）")
         self.previous_action.setShortcut(QKeySequence("PageUp"))
         self.previous_action.triggered.connect(self.previous_page)
 
         self.next_action = QAction("下一页", self)
-        self.next_action.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowRight))
-        self.next_action.setToolTip("下一页（PageDown / Right / Space）")
         self.next_action.setShortcut(QKeySequence("PageDown"))
         self.next_action.triggered.connect(self.next_page)
 
         self.fullscreen_action = QAction("全屏", self)
-        self.fullscreen_action.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarMaxButton))
+        self.fullscreen_action.setIcon(_tinted_standard_icon(self.style(), QStyle.StandardPixmap.SP_TitleBarMaxButton))
         self.fullscreen_action.setToolTip("进入或退出全屏（F11）")
         self.fullscreen_action.setShortcut(QKeySequence("F11"))
         self.fullscreen_action.triggered.connect(self.toggle_fullscreen)
 
-        self.zoom_out_action = QAction("−", self)
+        self.zoom_out_action = QAction("-", self)
         self.zoom_out_action.setToolTip("缩小")
         self.zoom_out_action.triggered.connect(lambda: self.change_zoom(-0.1))
         self.reset_action = QAction("100%", self)
@@ -196,44 +143,91 @@ class MainWindow(QMainWindow):
         button = QToolButton()
         button.setDefaultAction(action)
         button.setToolButtonStyle(
-            Qt.ToolButtonStyle.ToolButtonTextBesideIcon if text else Qt.ToolButtonStyle.ToolButtonIconOnly
+            Qt.ToolButtonStyle.ToolButtonTextOnly if text else Qt.ToolButtonStyle.ToolButtonIconOnly
         )
-        button.setFixedHeight(34)
-        if not text:
-            button.setFixedWidth(38)
+        button.setFixedHeight(40)
+        button.setFixedWidth(68 if text else 40)
         return button
 
-    def _create_edge_bar(self) -> QFrame:
-        """创建舞台顶部的轻量命令边。"""
-        bar = QFrame()
-        bar.setObjectName("edgeBar")
-        bar.setFixedHeight(54)
-        layout = QHBoxLayout(bar)
-        layout.setContentsMargins(16, 9, 16, 9)
-        layout.setSpacing(7)
-        layout.addWidget(self._action_button(self.open_action, text=True))
-        separator = QFrame()
-        separator.setObjectName("separator")
-        layout.addWidget(separator)
-        layout.addWidget(self._action_button(self.previous_action))
-        layout.addWidget(self._action_button(self.next_action))
+    def _create_top_bar(self, parent: QWidget) -> QFrame:
+        """创建文件信息、固定页码和模式按钮。"""
+        bar = QFrame(parent)
+        bar.setObjectName("topChrome")
+        layout = QGridLayout(bar)
+        layout.setContentsMargins(12, 5, 12, 5)
+        layout.setHorizontalSpacing(8)
+        layout.setColumnStretch(0, 1)
+        layout.setColumnStretch(2, 1)
+
+        left = QWidget(bar)
+        left_layout = QHBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(10)
+        self.open_button = self._action_button(self.open_action)
+        left_layout.addWidget(self.open_button)
+        self.file_label = QLabel("未打开项目")
+        self.file_label.setObjectName("fileName")
+        self.file_label.setMaximumWidth(380)
+        left_layout.addWidget(self.file_label)
+        left_layout.addStretch(1)
+        layout.addWidget(left, 0, 0)
+
         self.folio = QLabel("00 / 00")
         self.folio.setObjectName("folio")
-        layout.addWidget(self.folio)
-        layout.addStretch(1)
+        self.folio.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.folio.setFixedWidth(150)
+        layout.addWidget(self.folio, 0, 1)
+
+        right = QWidget(bar)
+        right_layout = QHBoxLayout(right)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(4)
+        right_layout.addStretch(1)
         self.mode_button = QToolButton()
-        self.mode_button.setText("进入舞台")
-        self.mode_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogListView))
-        self.mode_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.mode_button.setFixedHeight(34)
-        self.mode_button.setToolTip("在页面滚筒和单页舞台之间切换")
+        self.mode_button.setFixedSize(40, 40)
+        self.mode_button.setIcon(_tinted_standard_icon(self.style(), QStyle.StandardPixmap.SP_FileDialogListView))
+        self.mode_button.setToolTip("进入单页舞台")
         self.mode_button.clicked.connect(self.toggle_workspace_mode)
-        layout.addWidget(self.mode_button)
-        layout.addWidget(self._action_button(self.zoom_out_action))
-        layout.addWidget(self._action_button(self.reset_action, text=True))
-        layout.addWidget(self._action_button(self.zoom_in_action))
-        layout.addWidget(self._action_button(self.fit_action, text=True))
-        layout.addWidget(self._action_button(self.fullscreen_action))
+        right_layout.addWidget(self.mode_button)
+        right_layout.addWidget(self._action_button(self.fullscreen_action))
+        layout.addWidget(right, 0, 2)
+        return bar
+
+    def _create_bottom_bar(self, parent: QWidget) -> QFrame:
+        """创建页面进度、导入状态和单页缩放控制。"""
+        bar = QFrame(parent)
+        bar.setObjectName("bottomChrome")
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(16, 10, 16, 10)
+        layout.setSpacing(8)
+
+        self.status_label = QLabel("未打开项目")
+        self.status_label.setObjectName("statusLabel")
+        self.status_label.setMinimumWidth(110)
+        self.status_label.setMaximumWidth(260)
+        layout.addWidget(self.status_label)
+
+        self.progress = QProgressBar()
+        self.progress.setTextVisible(False)
+        self.progress.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.progress.hide()
+        layout.addWidget(self.progress, 1)
+
+        self.zoom_widgets: list[QWidget] = []
+        for widget in (
+            self._action_button(self.zoom_out_action),
+            self._action_button(self.reset_action, text=True),
+            self._action_button(self.zoom_in_action),
+            self._action_button(self.fit_action, text=True),
+        ):
+            self.zoom_widgets.append(widget)
+            layout.addWidget(widget)
+
+        self.cancel_button = QPushButton("取消")
+        self.cancel_button.setFixedSize(64, 40)
+        self.cancel_button.clicked.connect(self.cancel_import)
+        self.cancel_button.hide()
+        layout.addWidget(self.cancel_button)
         return bar
 
     def _create_content(self) -> QStackedWidget:
@@ -245,21 +239,19 @@ class MainWindow(QMainWindow):
 
         empty = QWidget()
         empty_layout = QVBoxLayout(empty)
-        empty_layout.setContentsMargins(72, 48, 72, 48)
-        empty_layout.addStretch(1)
+        empty_layout.setContentsMargins(32, 32, 32, 32)
+        empty_layout.addStretch(2)
         empty_folio = QLabel("00")
         empty_folio.setObjectName("emptyFolio")
-        empty_layout.addWidget(empty_folio, 0, Qt.AlignmentFlag.AlignLeft)
-        empty_title = QLabel("尚未打开项目")
-        empty_title.setObjectName("emptyTitle")
-        empty_layout.addWidget(empty_title, 0, Qt.AlignmentFlag.AlignLeft)
+        empty_folio.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_layout.addWidget(empty_folio)
         open_button = QPushButton("打开 PPT")
         open_button.setIcon(self.open_action.icon())
-        open_button.setFixedSize(118, 38)
+        open_button.setFixedSize(128, 42)
         open_button.clicked.connect(self.open_file)
-        empty_layout.addSpacing(18)
-        empty_layout.addWidget(open_button, 0, Qt.AlignmentFlag.AlignLeft)
-        empty_layout.addStretch(2)
+        empty_layout.addSpacing(16)
+        empty_layout.addWidget(open_button, 0, Qt.AlignmentFlag.AlignHCenter)
+        empty_layout.addStretch(3)
 
         stack = QStackedWidget()
         stack.addWidget(empty)
@@ -267,31 +259,6 @@ class MainWindow(QMainWindow):
         stack.setCurrentWidget(empty)
         self.empty_page = empty
         return stack
-
-    def _create_status_strip(self) -> QFrame:
-        """创建紧贴舞台底部的状态和导入进度。"""
-        strip = QFrame()
-        strip.setObjectName("statusStrip")
-        strip.setFixedHeight(36)
-        layout = QHBoxLayout(strip)
-        layout.setContentsMargins(16, 4, 16, 4)
-        layout.setSpacing(8)
-        self.status_label = QLabel("未打开项目")
-        self.status_label.setObjectName("statusLabel")
-        layout.addWidget(self.status_label)
-        layout.addStretch(1)
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 100)
-        self.progress.setTextVisible(False)
-        self.progress.setFixedWidth(220)
-        self.progress.hide()
-        self.cancel_button = QPushButton("取消")
-        self.cancel_button.setFixedSize(62, 26)
-        self.cancel_button.clicked.connect(self.cancel_import)
-        self.cancel_button.hide()
-        layout.addWidget(self.progress)
-        layout.addWidget(self.cancel_button)
-        return strip
 
     def _set_project_controls_enabled(self, enabled: bool) -> None:
         for action in (
@@ -306,6 +273,21 @@ class MainWindow(QMainWindow):
             action.setEnabled(enabled)
         self.mode_button.setEnabled(enabled)
 
+    def _set_importing_ui(self, importing: bool) -> None:
+        """在导入期间锁定覆盖层并切换进度控件。"""
+        self._importing = bool(importing)
+        self.chrome.set_locked(self._importing)
+        self.cancel_button.setVisible(self._importing)
+        if self._importing:
+            self.progress.setRange(0, 100)
+            self.progress.show()
+        elif self.project:
+            self.progress.setRange(0, max(1, self.state.page_count))
+            self.progress.setValue(self.state.current_page + 1)
+            self.progress.show()
+        else:
+            self.progress.hide()
+
     def open_file(self) -> None:
         """打开文件选择框并启动后台导入。"""
         if self.worker and self.worker.isRunning():
@@ -318,9 +300,8 @@ class MainWindow(QMainWindow):
         """显示导入状态并创建工作线程。"""
         self.open_action.setEnabled(False)
         self.progress.setValue(0)
-        self.progress.show()
-        self.cancel_button.show()
         self.status_label.setText("正在准备导入…")
+        self._set_importing_ui(True)
         self.worker = ImportWorker(self.importer, source)
         self.worker.progress_changed.connect(self._on_progress)
         self.worker.completed.connect(self._on_import_completed)
@@ -347,18 +328,22 @@ class MainWindow(QMainWindow):
         self.workspace.set_project(self.project, current)
         self.content_stack.setCurrentWidget(self.workspace)
         self._set_project_controls_enabled(True)
+        self._update_project_name()
         self._on_workspace_mode_changed(self.workspace.mode)
         self.status_label.setText("缓存命中" if result.cache_hit else "4K 页面已导出")
         self._update_counter()
+        self.chrome.reveal_all()
 
     def _on_import_failed(self, message: str) -> None:
         self.status_label.setText("导入失败")
+        self.chrome.set_locked(True)
         QMessageBox.warning(self, "导入失败", message)
+        self.chrome.set_locked(False)
+        self.open_button.setFocus()
 
     def _on_worker_finished(self) -> None:
         self.open_action.setEnabled(True)
-        self.progress.hide()
-        self.cancel_button.hide()
+        self._set_importing_ui(False)
         if self.worker:
             self.worker.deleteLater()
             self.worker = None
@@ -398,15 +383,13 @@ class MainWindow(QMainWindow):
             self.workspace.show_carousel()
 
     def toggle_fullscreen(self) -> None:
-        """进入全屏时隐藏全部边缘控制。"""
+        """全屏沿用相同的边缘唤出和自动隐藏控制。"""
         if self.isFullScreen():
             self.showNormal()
-            self.edge_bar.show()
-            self.status_strip.show()
+            self.chrome.reveal_all()
         else:
-            self.edge_bar.hide()
-            self.status_strip.hide()
             self.showFullScreen()
+            self.chrome.hide_now()
 
     def _on_workspace_page_changed(self, index: int) -> None:
         self.state.current_page = index
@@ -416,16 +399,28 @@ class MainWindow(QMainWindow):
 
     def _on_workspace_mode_changed(self, mode: str) -> None:
         is_stage = mode == "stage"
-        self.mode_button.setText("进入舞台" if mode == "carousel" else "页面滚筒")
-        self.status_label.setText("页面滚筒" if mode == "carousel" else "单页舞台")
+        self.mode_button.setToolTip("返回页面滚筒" if is_stage else "进入单页舞台")
+        self.status_label.setText("单页舞台" if is_stage else "页面滚筒")
         for action in (self.zoom_out_action, self.reset_action, self.zoom_in_action, self.fit_action):
             action.setEnabled(is_stage)
+        for widget in self.zoom_widgets:
+            widget.setVisible(is_stage)
         self.state.zoom = self.workspace.zoom_factor
         self._update_counter()
+        self.chrome.reveal_all()
 
     def _on_workspace_zoom_changed(self, zoom: float) -> None:
         self.state.zoom = zoom
         self._update_counter()
+
+    def _update_project_name(self) -> None:
+        if not self.project:
+            self.file_label.setText("未打开项目")
+            self.file_label.setToolTip("")
+            return
+        source = Path(self.project.source_path)
+        self.file_label.setText(source.name)
+        self.file_label.setToolTip(str(source))
 
     def _update_counter(self) -> None:
         if not self.state.page_count:
@@ -437,6 +432,10 @@ class MainWindow(QMainWindow):
         self.previous_action.setEnabled(not at_start)
         self.next_action.setEnabled(not at_end)
         self.reset_action.setText(f"{int(self.state.zoom * 100)}%")
+        if not self._importing:
+            self.progress.setRange(0, self.state.page_count)
+            self.progress.setValue(self.state.current_page + 1)
+            self.progress.show()
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
         """处理舞台翻页、首尾页和两级 Esc 行为。"""
@@ -460,8 +459,7 @@ class MainWindow(QMainWindow):
         if key == Qt.Key.Key_Escape:
             if self.isFullScreen():
                 self.showNormal()
-                self.edge_bar.show()
-                self.status_strip.show()
+                self.chrome.reveal_all()
                 event.accept()
                 return
             if self.workspace.mode == "stage":
@@ -480,7 +478,8 @@ class MainWindow(QMainWindow):
                 self.start_import(source)
 
     def closeEvent(self, event) -> None:  # noqa: N802
-        """保存当前页并在退出时取消工作线程。"""
+        """保存当前页并停止线程、计时器和动画。"""
+        self.chrome.dispose()
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
             self.worker.wait(1500)
