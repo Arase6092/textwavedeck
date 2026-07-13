@@ -1,6 +1,6 @@
 import pytest
 
-from widgets.cylinder_geometry import cylinder_pose, snap_index
+from widgets.cylinder_geometry import cylinder_pose, inertia_target, snap_index
 
 
 def test_center_page_is_front_facing_and_largest():
@@ -25,8 +25,26 @@ def test_pose_is_symmetric():
 
 
 def test_distant_pages_are_hidden():
-    assert cylinder_pose(3.0).visible
-    assert not cylinder_pose(4.0).visible
+    assert cylinder_pose(2.0).visible
+    assert not cylinder_pose(3.0).visible
+
+
+def test_five_page_layers_have_distinct_depth():
+    center = cylinder_pose(0.0)
+    first = cylinder_pose(1.0)
+    second = cylinder_pose(2.0)
+    assert center.opacity == 1.0
+    assert first.opacity == pytest.approx(0.58)
+    assert second.opacity == pytest.approx(0.18)
+    assert center.scale > first.scale > second.scale
+
+
+@pytest.mark.parametrize(
+    "offset,velocity,page_count,expected",
+    [(5.1, 1.0, 20, 7), (5.1, -1.0, 20, 3), (0.1, -2.0, 20, 0), (18.9, 2.0, 20, 19)],
+)
+def test_inertia_target_never_skips_more_than_two_pages(offset, velocity, page_count, expected):
+    assert inertia_target(offset, velocity, page_count) == expected
 
 
 @pytest.mark.parametrize(
