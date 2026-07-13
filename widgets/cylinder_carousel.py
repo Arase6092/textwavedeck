@@ -6,24 +6,27 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QEasingCurve, QElapsedTimer, Qt, QVariantAnimation, Signal
-from PySide6.QtGui import QColor, QFont, QMouseEvent, QPainter, QPen, QPixmap, QTransform, QWheelEvent
+from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen, QPixmap, QTransform, QWheelEvent
 from PySide6.QtWidgets import (
+    QGraphicsColorizeEffect,
+    QGraphicsDropShadowEffect,
     QGraphicsPixmapItem,
     QGraphicsRectItem,
     QGraphicsScene,
-    QGraphicsSimpleTextItem,
     QGraphicsView,
 )
 
+from app.theme import CONTROL_SURFACE, FOCUS_BLUE, PRIMARY_TEXT, STAGE_BACKGROUND, STRUCTURE_LINE
 from models.slide_project import SlidePage
-from widgets.cylinder_geometry import cylinder_pose, snap_index
+from widgets.cylinder_geometry import cylinder_pose, inertia_target, snap_index
 
 
 @dataclass(slots=True)
 class _CarouselItem:
     root: QGraphicsRectItem
     pixmap: QGraphicsPixmapItem
-    label: QGraphicsSimpleTextItem
+    colorize: QGraphicsColorizeEffect
+    shadow: QGraphicsDropShadowEffect
 
 
 class CylinderCarousel(QGraphicsView):
@@ -38,7 +41,7 @@ class CylinderCarousel(QGraphicsView):
         self.setFrameShape(QGraphicsView.Shape.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setBackgroundBrush(QColor("#f7f7f8"))
+        self.setBackgroundBrush(QColor(STAGE_BACKGROUND))
         self.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform)
         self._pages: list[SlidePage] = []
         self._items: list[_CarouselItem] = []
@@ -51,8 +54,10 @@ class CylinderCarousel(QGraphicsView):
         self._velocity = 0.0
         self._elapsed = QElapsedTimer()
         self._animation_target = 0
+        self._committed_index = 0
+        self._reduced_motion = False
         self._animation = QVariantAnimation(self)
-        self._animation.setDuration(280)
+        self._animation.setDuration(260)
         self._animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._animation.valueChanged.connect(lambda value: self._set_offset(float(value)))
         self._animation.finished.connect(self._finish_animation)
@@ -61,6 +66,11 @@ class CylinderCarousel(QGraphicsView):
     def current_index(self) -> int:
         """返回当前位于滚筒中央的页面。"""
         return self._current_index
+
+    @property
+    def reduced_motion(self) -> bool:
+        """返回当前是否禁用惯性和吸附动画。"""
+        return self._reduced_motion
 
     def set_pages(self, pages: list[SlidePage], current_index: int = 0) -> None:
         """重建滚筒页面并定位到指定索引。"""
@@ -72,13 +82,20 @@ class CylinderCarousel(QGraphicsView):
             root = QGraphicsRectItem(-320, -180, 640, 360)
             root.setData(0, position)
             pixmap = QGraphicsPixmapItem(root)
-            label = QGraphicsSimpleTextItem(f"{page.index + 1:02d}", root)
-            label.setBrush(QColor("#002fa7"))
-            label.setFont(QFont("Segoe UI", 12, QFont.Weight.DemiBold))
-            label.setPos(-306, -166)
+            colorize = QGraphicsColorizeEffect()
+            colorize.setColor(QColor(CONTROL_SURFACE))
+            colorize.setStrength(0.0)
+            pixmap.setGraphicsEffect(colorize)
+            shadow = QGraphicsDropShadowEffect()
+            shadow.setBlurRadius(34)
+            shadow.setOffset(0, 12)
+            shadow.setColor(QColor(59, 111, 255, 100))
+            shadow.setEnabled(False)
+            root.setGraphicsEffect(shadow)
             self.scene().addItem(root)
-            self._items.append(_CarouselItem(root, pixmap, label))
+            self._items.append(_CarouselItem(root, pixmap, colorize, shadow))
         self._current_index = snap_index(float(current_index), len(self._pages))
+        self._committed_index = self._current_index
         self._offset = float(self._current_index)
         self._update_scene_rect()
         self._layout_items()
@@ -89,9 +106,16 @@ class CylinderCarousel(QGraphicsView):
             return
         target = max(0, min(int(index), len(self._pages) - 1))
         if not animate:
-            self._set_offset(float(target))
+            self._set_offset(float(target), commit=True)
             return
         self._animate_to(target)
+
+    def set_reduced_motion(self, reduced: bool) -> None:
+        """减少动态时停止惯性，并让后续选页立即吸附。"""
+        self._reduced_motion = bool(reduced)
+        if self._reduced_motion:
+            self._animation.stop()
+            self._set_offset(float(snap_index(self._offset, len(self._pages))), commit=True)
 
     def activate_page(self, index: int) -> None:
         """侧页先居中；已居中的页面再次激活时进入舞台。"""
@@ -120,7 +144,6 @@ class CylinderCarousel(QGraphicsView):
         item.pixmap.setPixmap(pixmap)
         item.pixmap.setOffset(-width / 2, -height / 2)
         item.pixmap.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
-        item.label.setPos(-width / 2 + 14, -height / 2 + 10)
 
     def _layout_items(self) -> None:
         if not self._items:
@@ -149,32 +172,50 @@ class CylinderCarousel(QGraphicsView):
             item.root.setPos(center_x + pose.x_factor * radius, center_y + depth_drop)
             item.root.setOpacity(pose.opacity)
             item.root.setZValue(pose.z_value)
-            pen = QPen(QColor("#002fa7") if abs(relative) < 0.5 else QColor("#c7ccd4"))
-            pen.setWidth(3 if abs(relative) < 0.5 else 1)
+            distance = abs(relative)
+            item.colorize.setStrength(min(0.82, distance * 0.34))
+            centered = distance < 0.35
+            item.shadow.setEnabled(centered)
+            pen = QPen(QColor(PRIMARY_TEXT) if centered else QColor(STRUCTURE_LINE))
+            pen.setWidth(2 if centered else 1)
             pen.setCosmetic(True)
             item.root.setPen(pen)
 
-    def _set_offset(self, value: float) -> None:
+    def _set_offset(self, value: float, *, commit: bool = False) -> None:
         if not self._pages:
             return
         self._offset = max(0.0, min(value, len(self._pages) - 1.0))
         nearest = snap_index(self._offset, len(self._pages))
-        if nearest != self._current_index:
-            self._current_index = nearest
+        self._current_index = nearest
+        if commit and nearest != self._committed_index:
+            self._committed_index = nearest
             self.current_page_changed.emit(nearest)
         self._layout_items()
 
     def _animate_to(self, index: int) -> None:
         self._animation.stop()
         self._animation_target = index
+        if self._reduced_motion:
+            self._set_offset(float(index), commit=True)
+            return
         self._animation.setStartValue(self._offset)
         self._animation.setEndValue(float(index))
         distance = abs(self._offset - index)
-        self._animation.setDuration(max(160, min(420, round(180 + distance * 45))))
+        self._animation.setDuration(max(180, min(320, round(180 + distance * 55))))
         self._animation.start()
 
     def _finish_animation(self) -> None:
-        self._set_offset(float(self._animation_target))
+        self._set_offset(float(self._animation_target), commit=True)
+
+    def drawBackground(self, painter: QPainter, rect) -> None:  # noqa: N802
+        """绘制固定暗场和不随滚筒移动的水平参照线。"""
+        painter.fillRect(rect, QColor(STAGE_BACKGROUND))
+        pen = QPen(QColor(STRUCTURE_LINE))
+        pen.setWidth(1)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        y = self.sceneRect().center().y() + 8
+        painter.drawLine(rect.left(), y, rect.right(), y)
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         """窗口变化时重新计算舞台半径和页面尺寸。"""
@@ -218,7 +259,7 @@ class CylinderCarousel(QGraphicsView):
             self._drag_start_x = None
             self.setCursor(Qt.CursorShape.ArrowCursor)
             if self._drag_distance >= 7:
-                target = snap_index(self._offset + self._velocity * 180.0, len(self._pages))
+                target = inertia_target(self._offset, self._velocity, len(self._pages))
                 self._animate_to(target)
             else:
                 graphics_item = self.itemAt(event.position().toPoint())
@@ -234,6 +275,7 @@ class CylinderCarousel(QGraphicsView):
         """滚轮按一个页面步长旋转滚筒。"""
         delta = event.angleDelta().x() or event.angleDelta().y()
         if delta:
+            self._animation.stop()
             self.select_page(self._current_index + (-1 if delta > 0 else 1))
             event.accept()
             return

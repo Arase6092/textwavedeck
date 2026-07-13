@@ -4,6 +4,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PIL import Image
+from PySide6.QtCore import QAbstractAnimation
 from PySide6.QtWidgets import QApplication, QSplitter, QToolBar
 
 from app.main_window import MainWindow
@@ -51,11 +52,20 @@ def test_center_page_activation_emits_stage_request(qapp, pages):
     assert emitted == [2]
 
 
-def test_carousel_only_decodes_visible_thumbnails(qapp, pages):
+def test_carousel_only_decodes_five_visible_thumbnails(qapp, pages):
     carousel = CylinderCarousel()
     carousel.set_pages(pages * 25, current_index=50)
     loaded = sum(not item.pixmap.pixmap().isNull() for item in carousel._items)
-    assert loaded <= 7
+    assert loaded <= 5
+
+
+def test_reduced_motion_selects_without_animation(qapp, pages):
+    carousel = CylinderCarousel()
+    carousel.set_pages(pages, current_index=0)
+    carousel.set_reduced_motion(True)
+    carousel.select_page(2)
+    assert carousel.current_index == 2
+    assert carousel._animation.state() == QAbstractAnimation.State.Stopped
 
 
 def test_fit_mode_horizontal_release_requests_page_change():
