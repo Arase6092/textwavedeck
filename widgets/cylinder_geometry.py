@@ -6,6 +6,12 @@ import math
 from dataclasses import dataclass
 
 VISIBLE_RADIUS = 2.55
+CAROUSEL_HEIGHT_RATIO = 0.67
+CAROUSEL_MAX_WIDTH_RATIO = 0.86
+CAROUSEL_RADIUS_RATIO = 0.49
+CAROUSEL_RADIUS_MAX = 660.0
+CAROUSEL_CENTER_Y_OFFSET = -4.0
+CAROUSEL_DEPTH_DROP = 92.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +37,43 @@ class CarouselLayer:
     horizontal_scale: float
     opacity: float
     z_value: float
+
+
+@dataclass(frozen=True, slots=True)
+class CarouselViewportGeometry:
+    """滚筒和转场共享的响应式舞台尺寸。"""
+
+    center_x: float
+    center_y: float
+    radius: float
+    target_height: float
+    max_page_width: float
+    depth_drop: float
+
+
+def carousel_viewport_geometry(width: float, height: float) -> CarouselViewportGeometry:
+    """按视口尺寸计算已确认的紧凑滚筒舞台。"""
+    safe_width = max(1.0, float(width))
+    safe_height = max(1.0, float(height))
+    return CarouselViewportGeometry(
+        center_x=safe_width / 2.0,
+        center_y=safe_height / 2.0 + CAROUSEL_CENTER_Y_OFFSET,
+        radius=min(safe_width * CAROUSEL_RADIUS_RATIO, CAROUSEL_RADIUS_MAX),
+        target_height=safe_height * CAROUSEL_HEIGHT_RATIO,
+        max_page_width=safe_width * CAROUSEL_MAX_WIDTH_RATIO,
+        depth_drop=CAROUSEL_DEPTH_DROP,
+    )
+
+
+def fit_carousel_page(geometry: CarouselViewportGeometry, aspect_ratio: float) -> tuple[float, float]:
+    """保持页面比例并应用高度目标和窄窗宽度上限。"""
+    safe_aspect = max(0.01, float(aspect_ratio))
+    height = geometry.target_height
+    width = height * safe_aspect
+    if width > geometry.max_page_width:
+        width = geometry.max_page_width
+        height = width / safe_aspect
+    return width, height
 
 
 def cylinder_pose(relative_offset: float) -> CylinderPose:

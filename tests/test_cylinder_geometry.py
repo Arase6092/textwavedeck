@@ -1,5 +1,6 @@
 import pytest
 
+from widgets import cylinder_geometry
 from widgets.cylinder_geometry import cylinder_pose, inertia_target, snap_index
 
 
@@ -37,6 +38,30 @@ def test_five_page_layers_have_distinct_depth():
     assert first.opacity == pytest.approx(0.58)
     assert second.opacity == pytest.approx(0.18)
     assert center.scale > first.scale > second.scale
+
+
+def test_carousel_viewport_geometry_matches_approved_density():
+    """共享舞台参数应匹配已确认的桌面和紧凑窗口密度。"""
+    desktop = cylinder_geometry.carousel_viewport_geometry(1440, 900)
+    compact = cylinder_geometry.carousel_viewport_geometry(1024, 768)
+
+    assert desktop.target_height == pytest.approx(603.0)
+    assert desktop.max_page_width == pytest.approx(1238.4)
+    assert desktop.radius == pytest.approx(660.0)
+    assert desktop.center_y == pytest.approx(446.0)
+    assert desktop.depth_drop == pytest.approx(92.0)
+    assert compact.target_height == pytest.approx(514.56)
+    assert compact.radius == pytest.approx(501.76)
+
+
+def test_fit_carousel_page_caps_wide_slides_without_distortion():
+    """宽屏页面在窄窗口受宽度限制，且始终保持原始比例。"""
+    desktop = cylinder_geometry.carousel_viewport_geometry(1440, 900)
+    compact = cylinder_geometry.carousel_viewport_geometry(1024, 768)
+
+    assert cylinder_geometry.fit_carousel_page(desktop, 16 / 9) == pytest.approx((1072.0, 603.0))
+    assert cylinder_geometry.fit_carousel_page(compact, 16 / 9) == pytest.approx((880.64, 495.36))
+    assert cylinder_geometry.fit_carousel_page(compact, 4 / 3) == pytest.approx((686.08, 514.56))
 
 
 @pytest.mark.parametrize(
