@@ -178,6 +178,36 @@ def test_workspace_animates_mode_change_when_motion_is_enabled(qapp, pages):
     workspace._transition.stop()
 
 
+def test_workspace_uses_recomposition_overlay_for_mode_change(qapp, pages):
+    """普通放映进入滚筒时显示重组 overlay，并启动可中断动画。"""
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    workspace = StageWorkspace()
+    workspace.resize(1200, 720)
+    workspace.set_project(project, current_index=1, initial_mode="stage")
+    workspace.show()
+    qapp.processEvents()
+    workspace.show_carousel()
+    assert workspace.mode == "carousel"
+    assert workspace._overlay.isVisible()
+    assert workspace._transition.state() == QAbstractAnimation.State.Running
+    workspace._transition.stop()
+    workspace._finish_mode_immediately("carousel")
+
+
+def test_reduced_motion_skips_recomposition_overlay(qapp, pages):
+    """减少动态模式不播放大幅空间重组。"""
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    workspace = StageWorkspace()
+    workspace.set_reduced_motion(True)
+    workspace.set_project(project, current_index=1, initial_mode="stage")
+    workspace.show()
+    qapp.processEvents()
+    workspace.show_carousel()
+    assert workspace.mode == "carousel"
+    assert not workspace._overlay.isVisible()
+    assert workspace._transition.state() == QAbstractAnimation.State.Stopped
+
+
 def test_workspace_preserves_page_when_returning_to_carousel(qapp, pages):
     project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
     workspace = StageWorkspace()
