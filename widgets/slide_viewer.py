@@ -218,17 +218,10 @@ class SlideViewer(QGraphicsView):
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        """双击在适应窗口和 100% 原始比例间切换。"""
+        """将双击交给预览、放映或手势工作区处理。"""
         if event.button() == Qt.MouseButton.LeftButton:
-            if self._interaction_mode in {"preview", "slideshow"}:
-                self._press_point = None
-                self.double_clicked.emit()
-                event.accept()
-                return
-            if self._fit_mode:
-                self.reset_zoom()
-            else:
-                self.fit_in_view()
+            self._press_point = None
+            self.double_clicked.emit()
             event.accept()
             return
         super().mouseDoubleClickEvent(event)

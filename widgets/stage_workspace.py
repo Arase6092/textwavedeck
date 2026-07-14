@@ -42,6 +42,7 @@ class StageWorkspace(QWidget):
         self.carousel.stage_requested.connect(self.enter_stage)
         self.viewer.previous_requested.connect(self.previous_page)
         self.viewer.next_requested.connect(self.next_page)
+        self.viewer.double_clicked.connect(self._on_viewer_double_clicked)
 
     @property
     def current_index(self) -> int:
@@ -131,6 +132,11 @@ class StageWorkspace(QWidget):
             return
         self.carousel.select_page(self._current_index, animate=False)
         self._set_mode("carousel")
+
+    def _on_viewer_double_clicked(self) -> None:
+        """仅在手势单页中用双击返回滚筒。"""
+        if self._mode == "stage" and self.viewer.interaction_mode == "gesture":
+            self.show_carousel()
 
     def change_zoom(self, delta: float) -> float:
         """仅在单页舞台中改变缩放。"""

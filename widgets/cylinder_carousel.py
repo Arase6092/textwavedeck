@@ -151,14 +151,11 @@ class CylinderCarousel(QGraphicsView):
             self._set_offset(float(snap_index(self._offset, len(self._pages))), commit=True)
 
     def activate_page(self, index: int) -> None:
-        """侧页先居中；已居中的页面再次激活时进入舞台。"""
+        """单击滚筒中的任意页面时直接请求进入该页舞台。"""
         if not self._pages:
             return
         target = max(0, min(int(index), len(self._pages) - 1))
-        if target == self._current_index and abs(self._offset - target) < 0.08:
-            self.stage_requested.emit(target)
-        else:
-            self.select_page(target)
+        self.stage_requested.emit(target)
 
     def _update_scene_rect(self) -> None:
         width = max(800, self.viewport().width())

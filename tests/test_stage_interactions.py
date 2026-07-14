@@ -63,14 +63,12 @@ def test_carousel_selects_and_clamps_pages(qapp, pages):
     assert carousel.current_index == 0
 
 
-def test_center_page_activation_emits_stage_request(qapp, pages):
+def test_any_carousel_page_activation_enters_that_page(qapp, pages):
+    """滚筒中单击任意页面都应直接进入该页。"""
     carousel = CylinderCarousel()
     carousel.set_pages(pages, current_index=0)
     emitted = []
     carousel.stage_requested.connect(emitted.append)
-    carousel.activate_page(2)
-    assert emitted == []
-    carousel.select_page(2, animate=False)
     carousel.activate_page(2)
     assert emitted == [2]
 
@@ -353,6 +351,24 @@ def test_workspace_can_start_in_single_slide_stage(qapp, pages):
     assert workspace._transition.state() == QAbstractAnimation.State.Stopped
 
 
+def test_gesture_stage_double_click_returns_to_carousel(qapp, pages):
+    """手势单页双击应返回滚筒，并保持当前页面。"""
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    workspace = StageWorkspace()
+    workspace.set_reduced_motion(True)
+    workspace.set_project(project, current_index=1, initial_mode="stage")
+    workspace.viewer.set_interaction_mode("gesture")
+    workspace.show()
+    qapp.processEvents()
+
+    QTest.mouseDClick(workspace.viewer.viewport(), Qt.MouseButton.LeftButton)
+    qapp.processEvents()
+
+    assert workspace.mode == "carousel"
+    assert workspace.current_index == 1
+    workspace.close()
+
+
 def test_main_window_import_defaults_to_ppt_preview_mode(qapp, monkeypatch, tmp_path, pages):
     """主窗口导入完成后默认显示带缩略图和导入按钮的预览界面。"""
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
@@ -445,8 +461,8 @@ def test_mode_shortcut_toggles_gesture_and_powerpoint_modes(qapp, monkeypatch, t
     window.close()
 
 
-def test_gesture_mode_center_page_opens_gesture_stage(qapp, monkeypatch, tmp_path, pages):
-    """手势滚筒中央页应进入原有单页舞台，并保留缩放控制。"""
+def test_gesture_mode_carousel_page_opens_requested_stage(qapp, monkeypatch, tmp_path, pages):
+    """手势滚筒任意页面应直接进入对应单页舞台。"""
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     window = MainWindow()
     window.show()
@@ -455,11 +471,12 @@ def test_gesture_mode_center_page_opens_gesture_stage(qapp, monkeypatch, tmp_pat
     window.toggle_presentation_mode_action.trigger()
     qapp.processEvents()
 
-    window.workspace.carousel.activate_page(window.workspace.current_index)
+    window.workspace.carousel.activate_page(2)
     qapp.processEvents()
 
     assert window.presentation_mode == "gesture"
     assert window.workspace.mode == "stage"
+    assert window.workspace.current_index == 2
     assert window.zoom_in_action.isEnabled()
     assert all(not widget.isHidden() for widget in window.zoom_widgets)
     assert not window.top_bar.isHidden()
