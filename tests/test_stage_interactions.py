@@ -1,10 +1,12 @@
 import os
+from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PIL import Image
 from PySide6.QtCore import QAbstractAnimation, QRectF
+from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QApplication, QSplitter, QToolBar
 
 from app.main_window import MainWindow
@@ -113,6 +115,38 @@ def test_viewer_fit_keeps_dark_stage_margin(qapp, pages):
     assert bounds.bottom() <= viewer.viewport().height() - 30
     viewer.close()
 
+
+
+def test_workspace_can_start_in_single_slide_stage(qapp, pages):
+    """导入后可直接进入普通单页放映，而不是先显示滚筒。"""
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    workspace = StageWorkspace()
+    workspace.set_project(project, current_index=1, initial_mode="stage")
+    workspace.show()
+    qapp.processEvents()
+    assert workspace.mode == "stage"
+    assert workspace.current_index == 1
+    assert workspace.viewer.isVisible()
+    assert workspace._transition.state() == QAbstractAnimation.State.Stopped
+
+
+def test_main_window_import_defaults_to_single_slide_stage(qapp, monkeypatch, tmp_path, pages):
+    """主窗口导入完成后默认是普通放映界面。"""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    assert window.workspace.mode == "stage"
+    assert window.mode_button.toolTip() == "进入页面滚筒"
+    window.close()
+
+
+def test_hidden_mode_shortcut_is_ctrl_alt_m(qapp, monkeypatch, tmp_path):
+    """隐藏模式快捷键固定为 Ctrl+Alt+M，避免占用翻页和系统常用键。"""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    assert window.toggle_presentation_mode_action.shortcut() == QKeySequence("Ctrl+Alt+M")
+    window.close()
 
 def test_workspace_propagates_reduced_motion(qapp):
     workspace = StageWorkspace()

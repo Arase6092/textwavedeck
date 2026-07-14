@@ -102,6 +102,10 @@ class MainWindow(QMainWindow):
         self.fullscreen_action.setShortcut(QKeySequence("F11"))
         self.fullscreen_action.triggered.connect(self.toggle_fullscreen)
 
+        self.toggle_presentation_mode_action = QAction("切换页面滚筒", self)
+        self.toggle_presentation_mode_action.setToolTip("切换单页放映/页面滚筒（Ctrl+Alt+M）")
+        self.toggle_presentation_mode_action.setShortcut(QKeySequence("Ctrl+Alt+M"))
+        self.toggle_presentation_mode_action.triggered.connect(self.toggle_workspace_mode)
         self.zoom_out_action = QAction("-", self)
         self.zoom_out_action.setToolTip("缩小")
         self.zoom_out_action.triggered.connect(lambda: self.change_zoom(-0.1))
@@ -120,6 +124,7 @@ class MainWindow(QMainWindow):
             self.previous_action,
             self.next_action,
             self.fullscreen_action,
+            self.toggle_presentation_mode_action,
             self.zoom_out_action,
             self.reset_action,
             self.zoom_in_action,
@@ -315,7 +320,7 @@ class MainWindow(QMainWindow):
         self.state.set_page_count(self.project.slide_count)
         current = max(0, min(self.project.current_slide, self.state.page_count - 1))
         self.state.current_page = current
-        self.workspace.set_project(self.project, current)
+        self.workspace.set_project(self.project, current, initial_mode="stage")
         self.content_stack.setCurrentWidget(self.workspace)
         self._set_project_controls_enabled(True)
         self._update_project_name()
@@ -390,8 +395,8 @@ class MainWindow(QMainWindow):
     def _on_workspace_mode_changed(self, mode: str) -> None:
         is_stage = mode == "stage"
         self.mode_button.setIcon(line_icon("grid" if is_stage else "stage"))
-        self.mode_button.setToolTip("返回页面滚筒" if is_stage else "进入单页舞台")
-        self.status_label.setText("单页舞台" if is_stage else "页面滚筒")
+        self.mode_button.setToolTip("进入页面滚筒" if is_stage else "返回单页放映")
+        self.status_label.setText("单页放映" if is_stage else "页面滚筒")
         for action in (self.zoom_out_action, self.reset_action, self.zoom_in_action, self.fit_action):
             action.setEnabled(is_stage)
         for widget in self.zoom_widgets:

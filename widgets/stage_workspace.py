@@ -67,11 +67,18 @@ class StageWorkspace(QWidget):
     def reduced_motion(self) -> bool:
         return self._reduced_motion
 
-    def set_project(self, project: SlideProject, current_index: int = 0) -> None:
-        """加载项目并默认进入滚筒选页状态。"""
+    def set_project(self, project: SlideProject, current_index: int = 0, *, initial_mode: str = "carousel") -> None:
+        """加载项目，并按指定初始模式进入单页放映或滚筒。"""
         self._pages = list(project.pages)
         self._current_index = self._clamp_index(current_index)
         self.carousel.set_pages(self._pages, self._current_index)
+        if initial_mode == "stage" and self._pages:
+            self.viewer.show_image(self._pages[self._current_index].image_path)
+            self._mode = "stage"
+            self._finish_mode_immediately("stage")
+            self.page_changed.emit(self._current_index)
+            self.zoom_changed.emit(self.viewer.zoom_factor)
+            return
         self._mode = "carousel"
         self._finish_mode_immediately("carousel")
 
