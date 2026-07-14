@@ -36,6 +36,7 @@
 - 2026-07-14 | 暗场视觉实施计划 | 验证命令引用不存在的 `tests/test_slide_navigation.py` | 计划沿用了第一阶段文档中的旧测试文件名 | 执行计划前先用 `rg --files tests` 核对实际测试文件；本项目导航与舞台交互回归使用 `tests/test_stage_interactions.py`。
 - 2026-07-14 | 功能工作树回顾阶段方案 | 工作树中找不到 `第一阶段执行方案.md` | 该阶段方案只保留在项目根目录，没有被 Git 跟踪到功能工作树 | 从项目根目录读取阶段方案，从功能工作树读取实施计划和代码，不在工作树中硬编码查找未跟踪文档。
 - 2026-07-14 | `apply_patch` | PowerShell 和 `cmd /c apply_patch` 均返回 `Access is denied` | 当前 WindowsApps 下的 Codex 补丁包装器无执行权限 | 优先继续尝试标准补丁工具；若环境继续拒绝访问，只做精确文本替换并在交付中说明。
+- 2026-07-14 | `tests/test_stage_interactions.py` | overlay 子控件已调用 `show()` 但 `isVisible()` 仍为 `False` | Qt 父控件未显示时子控件运行时可见性不会成立 | 断言子控件可见前先 `workspace.show()` 并 `processEvents()`；仅检查显式隐藏状态时再用 `isHidden()`。
 
 ## 交付前检查
 

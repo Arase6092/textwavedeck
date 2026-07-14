@@ -65,6 +65,11 @@ def main() -> int:
 
         window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
         app.processEvents()
+        stage_default_path = OUTPUT / f"stage-default-{width}x{height}.png"
+        assert window.grab().save(str(stage_default_path))
+        window.toggle_workspace_mode()
+        QTest.qWait(850)
+        app.processEvents()
         carousel_chrome_path = OUTPUT / f"carousel-chrome-{width}x{height}.png"
         assert window.grab().save(str(carousel_chrome_path))
         window.chrome.hide_now()
@@ -101,6 +106,7 @@ def main() -> int:
         print(
             "VISUAL_OK",
             empty_path,
+            stage_default_path,
             carousel_chrome_path,
             carousel_hidden_path,
             stage_chrome_path,
