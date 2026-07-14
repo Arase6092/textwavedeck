@@ -92,6 +92,24 @@ def test_carousel_exposes_five_target_layers(qapp, pages):
     assert layers[4].opacity < layers[3].opacity < layers[2].opacity
 
 
+def test_carousel_uses_denser_responsive_stage(qapp, pages):
+    """桌面窗口中央页应接近舞台高度三分之二，并保留相邻页。"""
+    carousel = CylinderCarousel()
+    carousel.resize(1440, 900)
+    carousel.show()
+    carousel.set_pages(pages, current_index=1)
+    qapp.processEvents()
+
+    root = carousel._items[1].root
+    center = root.mapRectToScene(root.rect())
+    assert center.height() == pytest.approx(603.0, abs=2.0)
+    assert center.width() == pytest.approx(1072.0, abs=2.0)
+    assert center.center().y() == pytest.approx(446.0, abs=2.0)
+    assert carousel._items[0].root.isVisible()
+    assert carousel._items[2].root.isVisible()
+    carousel.close()
+
+
 
 def test_carousel_background_has_no_horizontal_reference_line(qapp):
     class FakePainter:

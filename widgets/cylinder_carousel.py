@@ -18,7 +18,14 @@ from PySide6.QtWidgets import (
 
 from app.theme import CONTROL_SURFACE, FOCUS_BLUE, PRIMARY_TEXT, STAGE_BACKGROUND, STRUCTURE_LINE, stage_background_gradient
 from models.slide_project import SlidePage
-from widgets.cylinder_geometry import CarouselLayer, cylinder_pose, inertia_target, snap_index
+from widgets.cylinder_geometry import (
+    CarouselLayer,
+    carousel_viewport_geometry,
+    cylinder_pose,
+    fit_carousel_page,
+    inertia_target,
+    snap_index,
+)
 
 
 @dataclass(slots=True)
@@ -89,7 +96,7 @@ class CylinderCarousel(QGraphicsView):
             shadow = QGraphicsDropShadowEffect()
             shadow.setBlurRadius(34)
             shadow.setOffset(0, 12)
-            shadow.setColor(QColor(59, 111, 255, 100))
+            shadow.setColor(QColor(59, 111, 255, 72))
             shadow.setEnabled(False)
             root.setGraphicsEffect(shadow)
             self.scene().addItem(root)
@@ -175,10 +182,7 @@ class CylinderCarousel(QGraphicsView):
         if not self._items:
             return
         scene_rect = self.sceneRect()
-        center_x = scene_rect.center().x()
-        center_y = scene_rect.center().y() - 8
-        radius = min(scene_rect.width() * 0.47, 620.0)
-        target_height = scene_rect.height() * 0.58
+        geometry = carousel_viewport_geometry(scene_rect.width(), scene_rect.height())
         for index, item in enumerate(self._items):
             relative = index - self._offset
             pose = cylinder_pose(relative)
@@ -187,15 +191,20 @@ class CylinderCarousel(QGraphicsView):
                 item.pixmap.setPixmap(QPixmap())
                 continue
             self._ensure_pixmap(index)
-            height = max(1.0, item.root.rect().height())
-            base_scale = target_height / height
+            source_width = max(1.0, item.root.rect().width())
+            source_height = max(1.0, item.root.rect().height())
+            _base_width, base_height = fit_carousel_page(geometry, source_width / source_height)
+            base_scale = base_height / source_height
             transform = QTransform().scale(
                 base_scale * pose.scale * pose.horizontal_scale,
                 base_scale * pose.scale,
             )
             item.root.setTransform(transform)
-            depth_drop = (1.0 - pose.scale) * 110.0
-            item.root.setPos(center_x + pose.x_factor * radius, center_y + depth_drop)
+            depth_drop = (1.0 - pose.scale) * geometry.depth_drop
+            item.root.setPos(
+                geometry.center_x + pose.x_factor * geometry.radius,
+                geometry.center_y + depth_drop,
+            )
             item.root.setOpacity(pose.opacity)
             item.root.setZValue(pose.z_value)
             distance = abs(relative)
