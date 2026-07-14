@@ -5,8 +5,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import QAbstractAnimation, QRectF, Qt
-from PySide6.QtGui import QKeySequence
+from PySide6.QtCore import QAbstractAnimation, QPoint, QPointF, QRectF, Qt
+from PySide6.QtGui import QKeySequence, QWheelEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QSplitter, QToolBar
 
@@ -16,6 +16,22 @@ from models.slide_project import SlidePage, SlideProject
 from widgets.cylinder_carousel import CylinderCarousel
 from widgets.slide_viewer import SlideViewer, classify_release
 from widgets.stage_workspace import StageWorkspace
+
+
+def _send_wheel(viewer: SlideViewer, delta: int) -> None:
+    """向查看器视口发送真实滚轮事件。"""
+    position = QPointF(viewer.viewport().rect().center())
+    event = QWheelEvent(
+        position,
+        QPointF(viewer.viewport().mapToGlobal(position.toPoint())),
+        QPoint(),
+        QPoint(0, delta),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.ScrollUpdate,
+        False,
+    )
+    QApplication.sendEvent(viewer.viewport(), event)
 
 
 @pytest.fixture(scope="module")
@@ -171,6 +187,7 @@ def test_main_window_import_defaults_to_single_slide_stage(qapp, monkeypatch, tm
     project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
     window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
     qapp.processEvents()
+    assert window.presentation_mode == "ppt"
     assert window.workspace.mode == "stage"
     assert window.mode_button.toolTip() == "进入手势模式"
     assert window.top_bar.isHidden()
@@ -189,14 +206,76 @@ def test_mode_shortcut_toggles_gesture_and_powerpoint_modes(qapp, monkeypatch, t
 
     window.toggle_presentation_mode_action.trigger()
     qapp.processEvents()
+    assert window.presentation_mode == "gesture"
     assert window.workspace.mode == "carousel"
     assert window.mode_button.toolTip() == "返回PPT模式"
     assert not window.top_bar.isHidden()
 
     window.toggle_presentation_mode_action.trigger()
     qapp.processEvents()
+    assert window.presentation_mode == "ppt"
     assert window.workspace.mode == "stage"
     assert window.mode_button.toolTip() == "进入手势模式"
+    assert window.top_bar.isHidden()
+    assert window.bottom_bar.isHidden()
+    window.close()
+
+
+def test_gesture_mode_center_page_opens_gesture_stage(qapp, monkeypatch, tmp_path, pages):
+    """手势滚筒中央页应进入原有单页舞台，并保留缩放控制。"""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    window.show()
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    window.toggle_presentation_mode_action.trigger()
+    qapp.processEvents()
+
+    window.workspace.carousel.activate_page(window.workspace.current_index)
+    qapp.processEvents()
+
+    assert window.presentation_mode == "gesture"
+    assert window.workspace.mode == "stage"
+    assert window.zoom_in_action.isEnabled()
+    assert all(not widget.isHidden() for widget in window.zoom_widgets)
+    assert not window.top_bar.isHidden()
+    window.close()
+
+
+def test_escape_returns_gesture_stage_to_carousel(qapp, monkeypatch, tmp_path, pages):
+    """手势单页舞台按 Esc 应返回滚筒，不触发 PPT 模式逻辑。"""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    window.show()
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    window.toggle_presentation_mode_action.trigger()
+    window.workspace.carousel.activate_page(window.workspace.current_index)
+    qapp.processEvents()
+
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+
+    assert window.presentation_mode == "gesture"
+    assert window.workspace.mode == "carousel"
+    window.close()
+
+
+def test_mode_shortcut_returns_from_gesture_stage_to_powerpoint(qapp, monkeypatch, tmp_path, pages):
+    """在手势单页舞台中也能用同一快捷键返回 PPT 模式。"""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    window.show()
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    window.toggle_presentation_mode_action.trigger()
+    window.workspace.carousel.activate_page(window.workspace.current_index)
+    qapp.processEvents()
+
+    window.toggle_presentation_mode_action.trigger()
+    qapp.processEvents()
+
+    assert window.presentation_mode == "ppt"
+    assert window.workspace.mode == "stage"
     assert window.top_bar.isHidden()
     assert window.bottom_bar.isHidden()
     window.close()
@@ -223,6 +302,57 @@ def test_powerpoint_mode_uses_slide_show_keyboard_navigation(qapp, monkeypatch, 
     assert window.workspace.current_index == len(pages) - 1
     QTest.keyClick(window, Qt.Key.Key_Home)
     assert window.workspace.current_index == 0
+    window.close()
+
+
+def test_powerpoint_mode_left_click_advances_slide(qapp, monkeypatch, tmp_path, pages):
+    """PPT 放映中左键单击应像 PowerPoint 一样前进一页。"""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    window.show()
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    qapp.processEvents()
+
+    QTest.mouseClick(window.workspace.viewer.viewport(), Qt.MouseButton.LeftButton)
+
+    assert window.workspace.current_index == 1
+    assert window.workspace.zoom_factor == pytest.approx(1.0)
+    window.close()
+
+
+def test_powerpoint_mode_wheel_navigates_without_zoom(qapp, monkeypatch, tmp_path, pages):
+    """PPT 放映滚轮应翻页，不能沿用手势单页的缩放行为。"""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    window.show()
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    qapp.processEvents()
+
+    _send_wheel(window.workspace.viewer, -120)
+
+    assert window.workspace.current_index == 1
+    assert window.workspace.zoom_factor == pytest.approx(1.0)
+    window.close()
+
+
+def test_gesture_stage_wheel_still_zooms(qapp, monkeypatch, tmp_path, pages):
+    """手势单页舞台滚轮仍应缩放，不能被 PPT 鼠标策略覆盖。"""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    window.workspace.set_reduced_motion(True)
+    window.show()
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    window.toggle_presentation_mode_action.trigger()
+    window.workspace.carousel.activate_page(window.workspace.current_index)
+    qapp.processEvents()
+
+    _send_wheel(window.workspace.viewer, -120)
+
+    assert window.workspace.current_index == 0
+    assert window.workspace.zoom_factor == pytest.approx(0.9)
     window.close()
 
 
@@ -367,4 +497,23 @@ def test_import_locks_chrome_visible(qapp, monkeypatch, tmp_path):
     assert not window.bottom_bar.isHidden()
     window._set_importing_ui(False)
     assert not window.chrome.locked
+    window.close()
+
+
+def test_finished_import_reapplies_powerpoint_chrome_policy(qapp, monkeypatch, tmp_path, pages):
+    """后台导入结束后应重新隐藏 PPT 模式控制层，并禁止边缘唤出。"""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    window.show()
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    window._set_importing_ui(True)
+    window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    window._on_worker_finished()
+    qapp.processEvents()
+
+    assert window.presentation_mode == "ppt"
+    assert window.top_bar.isHidden()
+    assert window.bottom_bar.isHidden()
+    window.chrome.reveal_for_position(0, window.height())
+    assert window.top_bar.isHidden()
     window.close()

@@ -81,6 +81,12 @@ def main() -> int:
         window.workspace.enter_stage(3)
         QTest.qWait(850)
         app.processEvents()
+        gesture_stage_path = OUTPUT / f"gesture-stage-{width}x{height}.png"
+        assert window.grab().save(str(gesture_stage_path))
+
+        window.toggle_workspace_mode()
+        QTest.qWait(200)
+        app.processEvents()
         ppt_return_path = OUTPUT / f"ppt-return-{width}x{height}.png"
         assert window.grab().save(str(ppt_return_path))
 
@@ -103,6 +109,7 @@ def main() -> int:
             ppt_mode_path,
             gesture_chrome_path,
             gesture_hidden_path,
+            gesture_stage_path,
             ppt_return_path,
             importing_path,
         )

@@ -38,6 +38,7 @@ class SlideViewer(QGraphicsView):
         self._zoom = 1.0
         self._fit_mode = True
         self._fit_margin = STAGE_SAFE_MARGIN
+        self._powerpoint_mode = False
         self._drag_start: QPoint | None = None
         self._press_point: QPoint | None = None
         self.setBackgroundBrush(QColor(STAGE_BACKGROUND))
@@ -108,6 +109,12 @@ class SlideViewer(QGraphicsView):
         if self._fit_mode:
             self.fit_in_view()
 
+    def set_powerpoint_mode(self, enabled: bool) -> None:
+        """切换 PowerPoint 放映鼠标策略，避免与手势单页交互混用。"""
+        self._powerpoint_mode = bool(enabled)
+        self._drag_start = None
+        self._press_point = None
+
     def _set_fit_mode(self, value: bool) -> None:
         if self._fit_mode != value:
             self._fit_mode = value
@@ -115,6 +122,14 @@ class SlideViewer(QGraphicsView):
 
     def wheelEvent(self, event) -> None:  # noqa: N802
         """滚轮缩放；按住 Ctrl 时也支持缩放。"""
+        if self._powerpoint_mode:
+            delta = event.angleDelta().x() or event.angleDelta().y()
+            if delta > 0:
+                self.previous_requested.emit()
+            elif delta < 0:
+                self.next_requested.emit()
+            event.accept()
+            return
         delta = 0.1 if event.angleDelta().y() > 0 else -0.1
         self.change_zoom(delta)
         event.accept()
@@ -122,6 +137,10 @@ class SlideViewer(QGraphicsView):
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         """按住左键进入拖动模式。"""
         if event.button() == Qt.MouseButton.LeftButton:
+            if self._powerpoint_mode:
+                self._press_point = event.position().toPoint()
+                event.accept()
+                return
             self._drag_start = event.position().toPoint()
             self._press_point = self._drag_start
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
@@ -131,6 +150,9 @@ class SlideViewer(QGraphicsView):
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         """拖动已放大的图片。"""
+        if self._powerpoint_mode and self._press_point is not None:
+            event.accept()
+            return
         if self._drag_start is not None:
             current = event.position().toPoint()
             if self._fit_mode and self._press_point is not None:
@@ -154,6 +176,11 @@ class SlideViewer(QGraphicsView):
             press_point = self._press_point
             self._drag_start = None
             self._press_point = None
+            if self._powerpoint_mode:
+                if press_point is not None and (release_point - press_point).manhattanLength() < 7:
+                    self.next_requested.emit()
+                event.accept()
+                return
             self.setCursor(Qt.CursorShape.ArrowCursor)
             if self._pixmap_item is not None:
                 self._pixmap_item.setPos(0, 0)
@@ -171,6 +198,9 @@ class SlideViewer(QGraphicsView):
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         """双击在适应窗口和 100% 原始比例间切换。"""
         if event.button() == Qt.MouseButton.LeftButton:
+            if self._powerpoint_mode:
+                event.accept()
+                return
             if self._fit_mode:
                 self.reset_zoom()
             else:

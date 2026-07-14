@@ -37,6 +37,8 @@
 - 2026-07-14 | 功能工作树回顾阶段方案 | 工作树中找不到 `第一阶段执行方案.md` | 该阶段方案只保留在项目根目录，没有被 Git 跟踪到功能工作树 | 从项目根目录读取阶段方案，从功能工作树读取实施计划和代码，不在工作树中硬编码查找未跟踪文档。
 - 2026-07-14 | `apply_patch` | PowerShell 和 `cmd /c apply_patch` 均返回 `Access is denied` | 当前 WindowsApps 下的 Codex 补丁包装器无执行权限 | 优先继续尝试标准补丁工具；若环境继续拒绝访问，只做精确文本替换并在交付中说明。
 - 2026-07-14 | `tests/test_stage_interactions.py` | overlay 子控件已调用 `show()` 但 `isVisible()` 仍为 `False` | Qt 父控件未显示时子控件运行时可见性不会成立 | 断言子控件可见前先 `workspace.show()` 并 `processEvents()`；仅检查显式隐藏状态时再用 `isHidden()`。
+- 2026-07-14 | `app/main_window.py` | 对齐 PPT 模式后，手势模式的单页缩放、拖动和 `Esc` 返回滚筒等功能丢失 | 把顶层 PPT/手势模式错误复用了工作区内部 `carousel/stage` 子状态 | 顶层模式使用独立状态；`carousel/stage` 只表示手势模式内部的滚筒和单页舞台。
+- 2026-07-14 | `_set_importing_ui` | 后台导入完成后 PPT 控制层仍可见且可由边缘唤出 | 导入锁解除后没有重新应用依赖 `_importing` 的模式显隐策略 | 导入状态每次变化后统一重算当前模式的控制层策略。
 
 ## 交付前检查
 
