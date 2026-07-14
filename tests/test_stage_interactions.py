@@ -5,8 +5,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import QAbstractAnimation, QRectF
+from PySide6.QtCore import QAbstractAnimation, QRectF, Qt
 from PySide6.QtGui import QKeySequence
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QSplitter, QToolBar
 
 from app.main_window import MainWindow
@@ -129,6 +130,24 @@ def test_viewer_fit_keeps_dark_stage_margin(qapp, pages):
     viewer.close()
 
 
+def test_viewer_can_match_powerpoint_slide_show_frame(qapp, tmp_path):
+    """PPT 模式下 16:9 页面应像放映一样贴合 16:9 窗口。"""
+    image_path = tmp_path / "slide.png"
+    Image.new("RGB", (1600, 900), "#FFFFFF").save(image_path)
+    viewer = SlideViewer()
+    viewer.resize(1600, 900)
+    viewer.set_fit_margin(0)
+    viewer.show()
+    viewer.show_image(str(image_path))
+    qapp.processEvents()
+    bounds = viewer.mapFromScene(viewer._pixmap_item.boundingRect()).boundingRect()
+    assert bounds.left() <= 2
+    assert bounds.top() <= 2
+    assert bounds.right() >= viewer.viewport().width() - 2
+    assert bounds.bottom() >= viewer.viewport().height() - 2
+    viewer.close()
+
+
 
 def test_workspace_can_start_in_single_slide_stage(qapp, pages):
     """导入后可直接进入普通单页放映，而不是先显示滚筒。"""
@@ -147,10 +166,96 @@ def test_main_window_import_defaults_to_single_slide_stage(qapp, monkeypatch, tm
     """主窗口导入完成后默认是普通放映界面。"""
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     window = MainWindow()
+    window.show()
+    qapp.processEvents()
     project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
     window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    qapp.processEvents()
     assert window.workspace.mode == "stage"
-    assert window.mode_button.toolTip() == "进入页面滚筒"
+    assert window.mode_button.toolTip() == "进入手势模式"
+    assert window.top_bar.isHidden()
+    assert window.bottom_bar.isHidden()
+    window.close()
+
+
+def test_mode_shortcut_toggles_gesture_and_powerpoint_modes(qapp, monkeypatch, tmp_path, pages):
+    """同一快捷键进入手势模式，也能返回纯 PPT 放映模式。"""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    window.show()
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    qapp.processEvents()
+
+    window.toggle_presentation_mode_action.trigger()
+    qapp.processEvents()
+    assert window.workspace.mode == "carousel"
+    assert window.mode_button.toolTip() == "返回PPT模式"
+    assert not window.top_bar.isHidden()
+
+    window.toggle_presentation_mode_action.trigger()
+    qapp.processEvents()
+    assert window.workspace.mode == "stage"
+    assert window.mode_button.toolTip() == "进入手势模式"
+    assert window.top_bar.isHidden()
+    assert window.bottom_bar.isHidden()
+    window.close()
+
+
+def test_powerpoint_mode_uses_slide_show_keyboard_navigation(qapp, monkeypatch, tmp_path, pages):
+    """PPT 模式对齐 PowerPoint Slide Show 的常用翻页键。"""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    window.show()
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    qapp.processEvents()
+
+    QTest.keyClick(window, Qt.Key.Key_N)
+    assert window.workspace.current_index == 1
+    QTest.keyClick(window, Qt.Key.Key_P)
+    assert window.workspace.current_index == 0
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    assert window.workspace.current_index == 1
+    QTest.keyClick(window, Qt.Key.Key_Backspace)
+    assert window.workspace.current_index == 0
+    QTest.keyClick(window, Qt.Key.Key_End)
+    assert window.workspace.current_index == len(pages) - 1
+    QTest.keyClick(window, Qt.Key.Key_Home)
+    assert window.workspace.current_index == 0
+    window.close()
+
+
+def test_powerpoint_mode_number_enter_jumps_to_slide(qapp, monkeypatch, tmp_path, pages):
+    """PPT 放映支持输入页码再按 Enter 跳转。"""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    window.show()
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    qapp.processEvents()
+
+    QTest.keyClicks(window, "3")
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    assert window.workspace.current_index == 2
+    QTest.keyClicks(window, "99")
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    assert window.workspace.current_index == 2
+    window.close()
+
+
+def test_escape_in_powerpoint_mode_does_not_enter_gesture_mode(qapp, monkeypatch, tmp_path, pages):
+    """Esc 按 PowerPoint 习惯处理，不再把 PPT 模式切到手势模式。"""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    window.show()
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    qapp.processEvents()
+
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+    assert window.workspace.mode == "stage"
+    assert window.workspace.current_index == 0
     window.close()
 
 

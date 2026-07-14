@@ -1,4 +1,4 @@
-"""真实 Windows Qt 平台的滚筒与单页舞台截图冒烟测试。"""
+"""真实 Windows Qt 平台的 PPT 模式与手势滚筒截图冒烟测试。"""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def _make_project() -> SlideProject:
 
 
 def main() -> int:
-    """捕获两种窗口尺寸下的暗场、覆盖层和舞台状态。"""
+    """捕获两种窗口尺寸下的 PPT 模式、手势模式和导入状态。"""
     OUTPUT.mkdir(parents=True, exist_ok=True)
     app = QApplication.instance() or QApplication([])
     project = _make_project()
@@ -65,30 +65,24 @@ def main() -> int:
 
         window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
         app.processEvents()
-        stage_default_path = OUTPUT / f"stage-default-{width}x{height}.png"
-        assert window.grab().save(str(stage_default_path))
+        ppt_mode_path = OUTPUT / f"ppt-mode-{width}x{height}.png"
+        assert window.grab().save(str(ppt_mode_path))
         window.toggle_workspace_mode()
         QTest.qWait(850)
         app.processEvents()
-        carousel_chrome_path = OUTPUT / f"carousel-chrome-{width}x{height}.png"
-        assert window.grab().save(str(carousel_chrome_path))
+        gesture_chrome_path = OUTPUT / f"gesture-chrome-{width}x{height}.png"
+        assert window.grab().save(str(gesture_chrome_path))
         window.chrome.hide_now()
         QTest.qWait(200)
         app.processEvents()
-        carousel_hidden_path = OUTPUT / f"carousel-hidden-{width}x{height}.png"
-        assert window.grab().save(str(carousel_hidden_path))
+        gesture_hidden_path = OUTPUT / f"gesture-hidden-{width}x{height}.png"
+        assert window.grab().save(str(gesture_hidden_path))
 
         window.workspace.enter_stage(3)
-        QTest.qWait(300)
-        window.chrome.reveal_all()
+        QTest.qWait(850)
         app.processEvents()
-        stage_chrome_path = OUTPUT / f"stage-chrome-{width}x{height}.png"
-        assert window.grab().save(str(stage_chrome_path))
-        window.chrome.hide_now()
-        QTest.qWait(200)
-        app.processEvents()
-        stage_hidden_path = OUTPUT / f"stage-hidden-{width}x{height}.png"
-        assert window.grab().save(str(stage_hidden_path))
+        ppt_return_path = OUTPUT / f"ppt-return-{width}x{height}.png"
+        assert window.grab().save(str(ppt_return_path))
 
         window.status_label.setText("正在导出第 4 / 7 页")
         window._set_importing_ui(True)
@@ -106,11 +100,10 @@ def main() -> int:
         print(
             "VISUAL_OK",
             empty_path,
-            stage_default_path,
-            carousel_chrome_path,
-            carousel_hidden_path,
-            stage_chrome_path,
-            stage_hidden_path,
+            ppt_mode_path,
+            gesture_chrome_path,
+            gesture_hidden_path,
+            ppt_return_path,
             importing_path,
         )
     return 0

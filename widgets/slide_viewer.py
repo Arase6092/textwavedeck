@@ -37,6 +37,7 @@ class SlideViewer(QGraphicsView):
         self._pixmap_item: QGraphicsPixmapItem | None = None
         self._zoom = 1.0
         self._fit_mode = True
+        self._fit_margin = STAGE_SAFE_MARGIN
         self._drag_start: QPoint | None = None
         self._press_point: QPoint | None = None
         self.setBackgroundBrush(QColor(STAGE_BACKGROUND))
@@ -64,8 +65,8 @@ class SlideViewer(QGraphicsView):
             return
         self.resetTransform()
         bounds = self._pixmap_item.boundingRect()
-        available_width = max(1.0, self.viewport().width() - STAGE_SAFE_MARGIN * 2)
-        available_height = max(1.0, self.viewport().height() - STAGE_SAFE_MARGIN * 2)
+        available_width = max(1.0, self.viewport().width() - self._fit_margin * 2)
+        available_height = max(1.0, self.viewport().height() - self._fit_margin * 2)
         factor = min(available_width / max(1.0, bounds.width()), available_height / max(1.0, bounds.height()))
         self.scale(factor, factor)
         self._pixmap_item.setPos(0, 0)
@@ -100,6 +101,12 @@ class SlideViewer(QGraphicsView):
     def zoom_factor(self) -> float:
         """返回逻辑缩放倍数。"""
         return self._zoom
+
+    def set_fit_margin(self, margin: int) -> None:
+        """设置适应窗口边距；PPT 放映模式使用 0 以贴近真实放映。"""
+        self._fit_margin = max(0, int(margin))
+        if self._fit_mode:
+            self.fit_in_view()
 
     def _set_fit_mode(self, value: bool) -> None:
         if self._fit_mode != value:

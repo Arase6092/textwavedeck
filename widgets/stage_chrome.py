@@ -37,6 +37,7 @@ class StageChrome(QObject):
         self._fade_duration_ms = max(0, fade_duration_ms)
         self._reduced_motion = reduced_motion
         self._locked = False
+        self._suppressed = False
         self._disposed = False
         self._tracked: list[QWidget] = []
         self._hide_after_animation: dict[QWidget, bool] = {}
@@ -70,6 +71,8 @@ class StageChrome(QObject):
         """显示两个控制层，并在最短可见时间后重新计时。"""
         if self._disposed:
             return
+        if self._suppressed and not self._locked:
+            return
         self._show_bar(self._top_bar)
         self._show_bar(self._bottom_bar)
         self._schedule_hide(max(self._hide_delay_ms, max(0, minimum_visible_ms)))
@@ -77,6 +80,8 @@ class StageChrome(QObject):
     def reveal_for_position(self, y: int, height: int) -> None:
         """鼠标进入上下边缘时只显示对应控制层。"""
         if self._disposed or height <= 0:
+            return
+        if self._suppressed and not self._locked:
             return
         revealed = False
         if 0 <= y <= TOP_REVEAL_HEIGHT:
@@ -93,7 +98,7 @@ class StageChrome(QObject):
         if self._disposed:
             return
         self._hide_timer.stop()
-        if self._locked or self._has_chrome_focus():
+        if self._locked or (self._has_chrome_focus() and not self._suppressed):
             self._show_bar(self._top_bar)
             self._show_bar(self._bottom_bar)
             return
@@ -107,6 +112,19 @@ class StageChrome(QObject):
             self._hide_timer.stop()
             self._show_bar(self._top_bar)
             self._show_bar(self._bottom_bar)
+        elif self._suppressed:
+            self._hide_all_immediately()
+        else:
+            self.reveal_all()
+
+    def set_suppressed(self, suppressed: bool) -> None:
+        """PPT 放映模式下抑制应用控制层，保留锁定状态的中文提示。"""
+        self._suppressed = bool(suppressed)
+        if self._locked:
+            self._show_bar(self._top_bar)
+            self._show_bar(self._bottom_bar)
+        elif self._suppressed:
+            self._hide_all_immediately()
         else:
             self.reveal_all()
 
@@ -167,6 +185,9 @@ class StageChrome(QObject):
         self._bottom_bar.raise_()
 
     def _schedule_hide(self, delay_ms: int) -> None:
+        if self._suppressed and not self._locked:
+            self._hide_all_immediately()
+            return
         if self._locked or self._has_chrome_focus():
             self._hide_timer.stop()
             return
@@ -177,6 +198,15 @@ class StageChrome(QObject):
 
     def _hide_bar(self, bar: QFrame) -> None:
         self._animate_bar(bar, 0.0, hide_after=True)
+
+    def _hide_all_immediately(self) -> None:
+        """PPT 放映模式下立即隐藏控制层，不保留淡出残影。"""
+        self._hide_timer.stop()
+        for bar in (self._top_bar, self._bottom_bar):
+            self._animations[bar].stop()
+            self._effects[bar].setOpacity(0.0)
+            self._hide_after_animation[bar] = True
+            bar.hide()
 
     def _animate_bar(self, bar: QFrame, target: float, *, hide_after: bool) -> None:
         animation = self._animations[bar]

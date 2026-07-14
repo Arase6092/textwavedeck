@@ -62,3 +62,19 @@ def test_edge_zones_reveal_corresponding_bar(qapp):
     assert not bottom.isHidden()
     chrome.dispose()
     host.close()
+
+
+def test_suppressed_chrome_stays_hidden_until_reenabled(qapp):
+    """PPT 模式抑制控制层后，边缘唤出和显式显示都不应恢复工具栏。"""
+    host, top, bottom = make_chrome_widgets(qapp)
+    chrome = StageChrome(host, top, bottom, fade_duration_ms=0)
+    chrome.set_suppressed(True)
+    chrome.reveal_all(minimum_visible_ms=0)
+    chrome.reveal_for_position(10, host.height())
+    assert top.isHidden()
+    assert bottom.isHidden()
+    chrome.set_suppressed(False)
+    assert not top.isHidden()
+    assert not bottom.isHidden()
+    chrome.dispose()
+    host.close()

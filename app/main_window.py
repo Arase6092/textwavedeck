@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.commands import NavigationState
-from app.theme import application_stylesheet, line_icon, reduced_motion_enabled
+from app.theme import STAGE_SAFE_MARGIN, application_stylesheet, line_icon, reduced_motion_enabled
 from app.workers import ImportWorker
 from models.slide_project import SlideProject
 from ppt.importer import PPTImporter
@@ -49,6 +49,7 @@ class MainWindow(QMainWindow):
         self.importer = PPTImporter()
         self.reduced_motion = reduced_motion_enabled()
         self._importing = False
+        self._slide_number_buffer = ""
         self._build_ui()
         self._restore_last_project()
 
@@ -103,7 +104,7 @@ class MainWindow(QMainWindow):
         self.fullscreen_action.triggered.connect(self.toggle_fullscreen)
 
         self.toggle_presentation_mode_action = QAction("切换页面滚筒", self)
-        self.toggle_presentation_mode_action.setToolTip("切换单页放映/页面滚筒（Ctrl+Alt+M）")
+        self.toggle_presentation_mode_action.setToolTip("切换 PPT 模式/手势模式（Ctrl+Alt+M）")
         self.toggle_presentation_mode_action.setShortcut(QKeySequence("Ctrl+Alt+M"))
         self.toggle_presentation_mode_action.triggered.connect(self.toggle_workspace_mode)
         self.zoom_out_action = QAction("-", self)
@@ -181,7 +182,7 @@ class MainWindow(QMainWindow):
         self.mode_button = QToolButton()
         self.mode_button.setFixedSize(40, 40)
         self.mode_button.setIcon(line_icon("stage"))
-        self.mode_button.setToolTip("进入单页舞台")
+        self.mode_button.setToolTip("进入手势模式")
         self.mode_button.clicked.connect(self.toggle_workspace_mode)
         right_layout.addWidget(self.mode_button)
         right_layout.addWidget(self._action_button(self.fullscreen_action))
@@ -327,7 +328,7 @@ class MainWindow(QMainWindow):
         self._on_workspace_mode_changed(self.workspace.mode)
         self.status_label.setText("缓存命中" if result.cache_hit else "4K 页面已导出")
         self._update_counter()
-        self.chrome.reveal_all()
+        self._apply_mode_chrome()
 
     def _on_import_failed(self, message: str) -> None:
         self.status_label.setText("导入失败")
@@ -369,9 +370,10 @@ class MainWindow(QMainWindow):
             self.workspace.reset_zoom()
 
     def toggle_workspace_mode(self) -> None:
-        """在滚筒选页和完整单页舞台之间切换。"""
+        """在 PPT 放映模式和手势滚筒模式之间切换。"""
         if not self.project:
             return
+        self._slide_number_buffer = ""
         if self.workspace.mode == "carousel":
             self.workspace.enter_stage(self.workspace.current_index)
         else:
@@ -395,14 +397,24 @@ class MainWindow(QMainWindow):
     def _on_workspace_mode_changed(self, mode: str) -> None:
         is_stage = mode == "stage"
         self.mode_button.setIcon(line_icon("grid" if is_stage else "stage"))
-        self.mode_button.setToolTip("进入页面滚筒" if is_stage else "返回单页放映")
-        self.status_label.setText("单页放映" if is_stage else "页面滚筒")
+        self.mode_button.setToolTip("进入手势模式" if is_stage else "返回PPT模式")
+        self.status_label.setText("PPT模式" if is_stage else "手势模式")
+        self.workspace.viewer.set_fit_margin(0 if is_stage else STAGE_SAFE_MARGIN)
         for action in (self.zoom_out_action, self.reset_action, self.zoom_in_action, self.fit_action):
             action.setEnabled(is_stage)
         for widget in self.zoom_widgets:
-            widget.setVisible(is_stage)
+            widget.setVisible(False if is_stage else widget.isVisible())
         self.state.zoom = self.workspace.zoom_factor
         self._update_counter()
+        self._apply_mode_chrome()
+
+    def _apply_mode_chrome(self) -> None:
+        """按 PPT/手势模式切换应用控制层显隐策略。"""
+        if self.workspace.mode == "stage" and self.project and not self._importing:
+            self.chrome.set_suppressed(True)
+            self.chrome.hide_now()
+            return
+        self.chrome.set_suppressed(False)
         self.chrome.reveal_all()
 
     def _on_workspace_zoom_changed(self, zoom: float) -> None:
@@ -436,6 +448,9 @@ class MainWindow(QMainWindow):
     def keyPressEvent(self, event) -> None:  # noqa: N802
         """处理舞台翻页、首尾页和两级 Esc 行为。"""
         key = event.key()
+        if self.project and self.workspace.mode == "stage" and self._handle_powerpoint_key(event):
+            return
+        self._slide_number_buffer = ""
         if key in (Qt.Key.Key_Right, Qt.Key.Key_Down, Qt.Key.Key_Space):
             self.next_page()
             event.accept()
@@ -458,11 +473,49 @@ class MainWindow(QMainWindow):
                 self.chrome.reveal_all()
                 event.accept()
                 return
-            if self.workspace.mode == "stage":
-                self.workspace.show_carousel()
-                event.accept()
-                return
         super().keyPressEvent(event)
+
+    def _handle_powerpoint_key(self, event) -> bool:
+        """对齐 PowerPoint Slide Show 的常用键盘放映交互。"""
+        key = event.key()
+        if Qt.Key.Key_0 <= key <= Qt.Key.Key_9:
+            self._slide_number_buffer += event.text()
+            event.accept()
+            return True
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if self._slide_number_buffer:
+                target = int(self._slide_number_buffer) - 1
+                self._slide_number_buffer = ""
+                if 0 <= target < self.state.page_count:
+                    self.select_page(target)
+                event.accept()
+                return True
+            self.next_page()
+            event.accept()
+            return True
+        self._slide_number_buffer = ""
+        if key in (Qt.Key.Key_N, Qt.Key.Key_PageDown, Qt.Key.Key_Right, Qt.Key.Key_Down, Qt.Key.Key_Space):
+            self.next_page()
+            event.accept()
+            return True
+        if key in (Qt.Key.Key_P, Qt.Key.Key_PageUp, Qt.Key.Key_Left, Qt.Key.Key_Up, Qt.Key.Key_Backspace):
+            self.previous_page()
+            event.accept()
+            return True
+        if key == Qt.Key.Key_Home and self.state.page_count:
+            self.select_page(0)
+            event.accept()
+            return True
+        if key == Qt.Key.Key_End and self.state.page_count:
+            self.select_page(self.state.page_count - 1)
+            event.accept()
+            return True
+        if key == Qt.Key.Key_Escape:
+            if self.isFullScreen():
+                self.showNormal()
+            event.accept()
+            return True
+        return False
 
     def _restore_last_project(self) -> None:
         """从用户配置恢复最近一次路径，失效时不弹窗打扰启动。"""
