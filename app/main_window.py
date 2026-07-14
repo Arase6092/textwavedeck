@@ -52,6 +52,7 @@ class MainWindow(QMainWindow):
         self._importing = False
         self._presentation_mode = "ppt"
         self._ppt_view_mode = "preview"
+        self._slideshow_click_origin: int | None = None
         self._slide_number_buffer = ""
         self._build_ui()
         self._restore_last_project()
@@ -252,9 +253,8 @@ class MainWindow(QMainWindow):
         self.workspace.page_changed.connect(self._on_workspace_page_changed)
         self.workspace.mode_changed.connect(self._on_workspace_mode_changed)
         self.workspace.zoom_changed.connect(self._on_workspace_zoom_changed)
-        self.workspace.viewer.double_clicked.connect(
-            lambda: self.set_ppt_view_mode("preview")
-        )
+        self.workspace.viewer.slideshow_click_started.connect(self._on_slideshow_click_started)
+        self.workspace.viewer.double_clicked.connect(self._on_slideshow_double_clicked)
 
         empty = QWidget()
         empty_layout = QVBoxLayout(empty)
@@ -403,6 +403,8 @@ class MainWindow(QMainWindow):
         """切换 PPT 预览/放映子模式，不改变当前页。"""
         if mode not in {"preview", "slideshow"}:
             raise ValueError(f"未知 PPT 视图模式：{mode}")
+        if mode != self._ppt_view_mode:
+            self._slideshow_click_origin = None
         self._ppt_view_mode = mode
         self._slide_number_buffer = ""
         if self._presentation_mode != "ppt" or not self.project:
@@ -410,6 +412,21 @@ class MainWindow(QMainWindow):
         if mode == "slideshow" and self.workspace.mode == "carousel":
             self.workspace.enter_stage(self.workspace.current_index)
         self._on_workspace_mode_changed(self.workspace.mode)
+
+    def _on_slideshow_click_started(self) -> None:
+        """记录首次单击前页码，供随后发生的双击恢复。"""
+        if self.project and self._presentation_mode == "ppt" and self._ppt_view_mode == "slideshow":
+            self._slideshow_click_origin = self.workspace.current_index
+
+    def _on_slideshow_double_clicked(self) -> None:
+        """恢复双击前页码并返回预览，避免最终停在下一页。"""
+        if self._presentation_mode != "ppt" or self._ppt_view_mode != "slideshow":
+            return
+        origin = self._slideshow_click_origin
+        if origin is not None:
+            self._select_page(origin, source="external")
+        self._slideshow_click_origin = None
+        self.set_ppt_view_mode("preview")
 
     def toggle_workspace_mode(self) -> None:
         """切换顶层 PPT/手势模式，保留手势模式内部的两级视图。"""

@@ -8,6 +8,8 @@
 
 **Tech Stack:** Python 3.11, PySide6, pytest, pytest-qt/QTest, Pillow, existing PowerPoint COM import pipeline.
 
+> **Post-implementation correction:** Task 1 originally delayed slideshow clicks with `QApplication.doubleClickInterval()`. Usability validation showed that system interval can exceed one second. The final implementation advances immediately, records the click-sequence origin in `MainWindow`, and restores that origin if a double-click follows. The timer snippets below are retained only as the original execution history and must not be reintroduced.
+
 ---
 
 ## File Map

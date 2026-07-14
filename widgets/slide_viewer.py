@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, QTimer, Qt, Signal
+from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPixmap
-from PySide6.QtWidgets import QApplication, QGraphicsPixmapItem, QGraphicsScene, QGraphicsView
+from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView
 
 from app.theme import STAGE_BACKGROUND, STAGE_SAFE_MARGIN, stage_background_gradient
 
@@ -18,8 +18,8 @@ def classify_release(
     fit_mode: bool,
     threshold: float = 80.0,
 ) -> str | None:
-    """判断适应窗口状态下的水平滑动方向。"""
-    if not fit_mode or abs(delta_x) < threshold or abs(delta_x) <= abs(delta_y) * 1.25:
+    """判断长距离水平拖动方向，放大状态仍允许切页。"""
+    if abs(delta_x) < threshold or abs(delta_x) <= abs(delta_y) * 1.25:
         return None
     return "next" if delta_x < 0 else "previous"
 
@@ -29,6 +29,7 @@ class SlideViewer(QGraphicsView):
 
     previous_requested = Signal()
     next_requested = Signal()
+    slideshow_click_started = Signal()
     double_clicked = Signal()
     fit_mode_changed = Signal(bool)
     VALID_INTERACTION_MODES = {"gesture", "preview", "slideshow"}
@@ -43,9 +44,6 @@ class SlideViewer(QGraphicsView):
         self._interaction_mode = "gesture"
         self._drag_start: QPoint | None = None
         self._press_point: QPoint | None = None
-        self._single_click_timer = QTimer(self)
-        self._single_click_timer.setSingleShot(True)
-        self._single_click_timer.timeout.connect(self._emit_delayed_slideshow_click)
         self.setBackgroundBrush(QColor(STAGE_BACKGROUND))
         self.setFrameShape(QGraphicsView.Shape.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -128,14 +126,8 @@ class SlideViewer(QGraphicsView):
         if mode not in self.VALID_INTERACTION_MODES:
             raise ValueError(f"未知页面交互模式：{mode}")
         self._interaction_mode = mode
-        self._single_click_timer.stop()
         self._drag_start = None
         self._press_point = None
-
-    def _emit_delayed_slideshow_click(self) -> None:
-        """双击判定结束后再执行放映单击翻页。"""
-        if self._interaction_mode == "slideshow":
-            self.next_requested.emit()
 
     def _set_fit_mode(self, value: bool) -> None:
         if self._fit_mode != value:
@@ -164,6 +156,8 @@ class SlideViewer(QGraphicsView):
         if event.button() == Qt.MouseButton.LeftButton:
             if self._interaction_mode != "gesture":
                 self._press_point = event.position().toPoint()
+                if self._interaction_mode == "slideshow":
+                    self.slideshow_click_started.emit()
                 event.accept()
                 return
             self._drag_start = event.position().toPoint()
@@ -203,7 +197,7 @@ class SlideViewer(QGraphicsView):
             self._press_point = None
             if self._interaction_mode == "slideshow":
                 if press_point is not None and (release_point - press_point).manhattanLength() < 7:
-                    self._single_click_timer.start(QApplication.doubleClickInterval())
+                    self.next_requested.emit()
                 event.accept()
                 return
             if self._interaction_mode == "preview":
@@ -227,7 +221,6 @@ class SlideViewer(QGraphicsView):
         """双击在适应窗口和 100% 原始比例间切换。"""
         if event.button() == Qt.MouseButton.LeftButton:
             if self._interaction_mode in {"preview", "slideshow"}:
-                self._single_click_timer.stop()
                 self._press_point = None
                 self.double_clicked.emit()
                 event.accept()

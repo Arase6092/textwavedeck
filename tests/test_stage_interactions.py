@@ -149,8 +149,29 @@ def test_fit_mode_horizontal_release_requests_page_change():
     assert classify_release(20, 2, fit_mode=True) is None
 
 
-def test_zoomed_release_never_changes_page():
-    assert classify_release(-160, 10, fit_mode=False) is None
+def test_zoomed_horizontal_release_still_changes_page():
+    """放大后长距离水平拖动仍应切页。"""
+    assert classify_release(-160, 10, fit_mode=False) == "next"
+    assert classify_release(160, -10, fit_mode=False) == "previous"
+
+
+def test_zoomed_viewer_horizontal_drag_requests_next_page(qapp, pages):
+    """真实放大页面拖动路径必须发出下一页请求。"""
+    viewer = SlideViewer()
+    viewer.resize(800, 600)
+    viewer.show()
+    viewer.show_image(pages[0].image_path)
+    viewer.change_zoom(0.5)
+    next_spy = QSignalSpy(viewer.next_requested)
+    start = viewer.viewport().rect().center() + QPoint(120, 0)
+    end = viewer.viewport().rect().center() - QPoint(120, 0)
+
+    QTest.mousePress(viewer.viewport(), Qt.MouseButton.LeftButton, pos=start)
+    QTest.mouseMove(viewer.viewport(), end)
+    QTest.mouseRelease(viewer.viewport(), Qt.MouseButton.LeftButton, pos=end)
+
+    assert next_spy.count() == 1
+    viewer.close()
 
 
 def test_viewer_fit_keeps_dark_stage_margin(qapp, pages):
@@ -206,8 +227,8 @@ def test_preview_viewer_click_is_idle_and_double_click_requests_slideshow(qapp, 
     viewer.close()
 
 
-def test_slideshow_single_click_advances_after_double_click_window(qapp, pages):
-    """放映单击在系统双击判定结束后执行翻页。"""
+def test_slideshow_single_click_advances_immediately(qapp, pages):
+    """放映单击必须在释放时立即发出翻页请求。"""
     viewer = SlideViewer()
     viewer.resize(800, 600)
     viewer.show()
@@ -216,14 +237,12 @@ def test_slideshow_single_click_advances_after_double_click_window(qapp, pages):
     next_spy = QSignalSpy(viewer.next_requested)
 
     QTest.mouseClick(viewer.viewport(), Qt.MouseButton.LeftButton)
-    assert next_spy.count() == 0
-    QTest.qWait(QApplication.doubleClickInterval() + 20)
     assert next_spy.count() == 1
     viewer.close()
 
 
-def test_slideshow_double_click_cancels_pending_single_click(qapp, pages):
-    """放映双击返回预览时不能先触发一次下一页。"""
+def test_slideshow_double_click_reports_immediate_click_and_toggle(qapp, pages):
+    """查看器立即报告首次单击，再报告双击供主窗口回滚页码。"""
     viewer = SlideViewer()
     viewer.resize(800, 600)
     viewer.show()
@@ -234,9 +253,8 @@ def test_slideshow_double_click_cancels_pending_single_click(qapp, pages):
 
     QTest.mouseClick(viewer.viewport(), Qt.MouseButton.LeftButton)
     QTest.mouseDClick(viewer.viewport(), Qt.MouseButton.LeftButton)
-    QTest.qWait(QApplication.doubleClickInterval() + 20)
     assert double_spy.count() == 1
-    assert next_spy.count() == 0
+    assert next_spy.count() == 1
     viewer.close()
 
 
@@ -527,8 +545,6 @@ def test_powerpoint_mode_left_click_advances_slide(qapp, monkeypatch, tmp_path, 
 
     QTest.mouseClick(window.workspace.viewer.viewport(), Qt.MouseButton.LeftButton)
 
-    assert window.workspace.current_index == 0
-    QTest.qWait(QApplication.doubleClickInterval() + 20)
     assert window.workspace.current_index == 1
     assert window.workspace.zoom_factor == pytest.approx(1.0)
     window.close()
