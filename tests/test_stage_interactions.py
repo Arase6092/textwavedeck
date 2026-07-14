@@ -6,7 +6,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from PIL import Image
 from PySide6.QtCore import QAbstractAnimation, QPoint, QPointF, QRectF, Qt
-from PySide6.QtGui import QKeySequence, QWheelEvent
+from PySide6.QtGui import QKeySequence, QPixmap, QWheelEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QSplitter, QToolBar
 
@@ -14,7 +14,9 @@ from app.main_window import MainWindow
 from app.theme import STAGE_GRADIENT_BOTTOM, STAGE_GRADIENT_CENTER, STAGE_GRADIENT_TOP
 from models.slide_project import SlidePage, SlideProject
 from widgets.cylinder_carousel import CylinderCarousel
+from widgets.cylinder_geometry import CarouselLayer
 from widgets.slide_viewer import SlideViewer, classify_release
+from widgets.stage_recomposition_overlay import StageRecompositionOverlay
 from widgets.stage_workspace import StageWorkspace
 
 
@@ -445,6 +447,22 @@ def test_workspace_uses_recomposition_overlay_for_mode_change(qapp, pages):
     assert workspace._transition.state() == QAbstractAnimation.State.Running
     workspace._transition.stop()
     workspace._finish_mode_immediately("carousel")
+
+
+def test_recomposition_overlay_matches_carousel_center_geometry(qapp, tmp_path):
+    """重组转场的中央页目标应与真实滚筒使用相同紧凑尺寸。"""
+    image_path = tmp_path / "slide.png"
+    Image.new("RGB", (1600, 900), "#FFFFFF").save(image_path)
+    overlay = StageRecompositionOverlay()
+    overlay.resize(1440, 900)
+    pixmap = QPixmap(str(image_path))
+    center_layer = CarouselLayer(0, 0, 0.0, 1.0, 1.0, 1.0, 100.0)
+
+    rect = overlay._carousel_rect(center_layer, pixmap)
+
+    assert rect.width() == pytest.approx(1072.0, abs=2.0)
+    assert rect.height() == pytest.approx(603.0, abs=2.0)
+    assert rect.center().y() == pytest.approx(446.0, abs=2.0)
 
 
 def test_reduced_motion_skips_recomposition_overlay(qapp, pages):

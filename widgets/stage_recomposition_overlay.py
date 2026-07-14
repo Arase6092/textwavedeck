@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QWidget
 
 from app.theme import FOCUS_BLUE, STAGE_SAFE_MARGIN, stage_background_gradient
 from models.slide_project import SlidePage
-from widgets.cylinder_geometry import CarouselLayer
+from widgets.cylinder_geometry import CarouselLayer, carousel_viewport_geometry, fit_carousel_page
 
 
 class StageRecompositionOverlay(QWidget):
@@ -108,15 +108,18 @@ class StageRecompositionOverlay(QWidget):
 
     def _carousel_rect(self, layer: CarouselLayer, pixmap: QPixmap) -> QRectF:
         """计算圆柱滚筒目标矩形。"""
-        center_x = self.width() / 2
-        center_y = self.height() / 2 - 8
-        radius = min(self.width() * 0.47, 620.0)
-        target_height = self.height() * 0.58
-        height = target_height * layer.scale
+        geometry = carousel_viewport_geometry(self.width(), self.height())
         aspect = pixmap.width() / max(1, pixmap.height())
-        width = height * aspect * layer.horizontal_scale
-        depth_drop = (1.0 - layer.scale) * 110.0
-        return QRectF(center_x + layer.x_factor * radius - width / 2, center_y + depth_drop - height / 2, width, height)
+        base_width, base_height = fit_carousel_page(geometry, aspect)
+        width = base_width * layer.scale * layer.horizontal_scale
+        height = base_height * layer.scale
+        depth_drop = (1.0 - layer.scale) * geometry.depth_drop
+        return QRectF(
+            geometry.center_x + layer.x_factor * geometry.radius - width / 2,
+            geometry.center_y + depth_drop - height / 2,
+            width,
+            height,
+        )
 
     def _side_start_rect(self, layer: CarouselLayer, carousel: QRectF) -> QRectF:
         """侧页从舞台暗处进入或退场。"""
