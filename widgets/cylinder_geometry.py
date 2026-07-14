@@ -20,6 +20,19 @@ class CylinderPose:
     visible: bool
 
 
+@dataclass(frozen=True, slots=True)
+class CarouselLayer:
+    """滚筒中可见页面的归一化目标布局。"""
+
+    index: int
+    relative: int
+    x_factor: float
+    scale: float
+    horizontal_scale: float
+    opacity: float
+    z_value: float
+
+
 def cylinder_pose(relative_offset: float) -> CylinderPose:
     """根据页面相对滚筒中心的偏移计算透视姿态。"""
     distance = abs(relative_offset)

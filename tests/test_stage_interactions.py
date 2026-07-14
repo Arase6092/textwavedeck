@@ -62,6 +62,19 @@ def test_carousel_only_decodes_five_visible_thumbnails(qapp, pages):
     assert loaded <= 5
 
 
+def test_carousel_exposes_five_target_layers(qapp, pages):
+    """滚筒暴露稳定的五页目标布局，供重组转场复用。"""
+    carousel = CylinderCarousel()
+    carousel.resize(1200, 720)
+    carousel.set_pages(pages * 3, current_index=4)
+    layers = carousel.target_layers(4)
+    assert [layer.index for layer in layers] == [2, 3, 4, 5, 6]
+    assert layers[2].relative == 0
+    assert layers[2].opacity == 1.0
+    assert layers[0].opacity < layers[1].opacity < layers[2].opacity
+    assert layers[4].opacity < layers[3].opacity < layers[2].opacity
+
+
 
 def test_carousel_background_has_no_horizontal_reference_line(qapp):
     class FakePainter:

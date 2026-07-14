@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 
 from app.theme import CONTROL_SURFACE, FOCUS_BLUE, PRIMARY_TEXT, STAGE_BACKGROUND, STRUCTURE_LINE, stage_background_gradient
 from models.slide_project import SlidePage
-from widgets.cylinder_geometry import cylinder_pose, inertia_target, snap_index
+from widgets.cylinder_geometry import CarouselLayer, cylinder_pose, inertia_target, snap_index
 
 
 @dataclass(slots=True)
@@ -99,6 +99,32 @@ class CylinderCarousel(QGraphicsView):
         self._offset = float(self._current_index)
         self._update_scene_rect()
         self._layout_items()
+
+    def target_layers(self, center_index: int | None = None) -> list[CarouselLayer]:
+        """返回中心页左右两级共五页的目标布局。"""
+        if not self._pages:
+            return []
+        center = self._current_index if center_index is None else max(0, min(int(center_index), len(self._pages) - 1))
+        layers: list[CarouselLayer] = []
+        for relative in range(-2, 3):
+            index = center + relative
+            if index < 0 or index >= len(self._pages):
+                continue
+            pose = cylinder_pose(float(relative))
+            if not pose.visible:
+                continue
+            layers.append(
+                CarouselLayer(
+                    index=index,
+                    relative=relative,
+                    x_factor=pose.x_factor,
+                    scale=pose.scale,
+                    horizontal_scale=pose.horizontal_scale,
+                    opacity=pose.opacity,
+                    z_value=pose.z_value,
+                )
+            )
+        return layers
 
     def select_page(self, index: int, *, animate: bool = True) -> None:
         """选择页面；越界索引会夹取到首尾页。"""
