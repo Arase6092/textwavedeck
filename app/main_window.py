@@ -31,6 +31,7 @@ from app.workers import ImportWorker
 from models.slide_project import SlideProject
 from ppt.importer import PPTImporter
 from ppt.project_store import project_dir, save_project
+from widgets.ppt_preview_workspace import PptPreviewWorkspace
 from widgets.stage_chrome import StageChrome
 from widgets.stage_workspace import StageWorkspace
 
@@ -50,6 +51,7 @@ class MainWindow(QMainWindow):
         self.reduced_motion = reduced_motion_enabled()
         self._importing = False
         self._presentation_mode = "ppt"
+        self._ppt_view_mode = "preview"
         self._slide_number_buffer = ""
         self._build_ui()
         self._restore_last_project()
@@ -58,6 +60,11 @@ class MainWindow(QMainWindow):
     def presentation_mode(self) -> str:
         """返回顶层 PPT/手势模式，不混用工作区内部视图状态。"""
         return self._presentation_mode
+
+    @property
+    def ppt_view_mode(self) -> str:
+        """返回 PPT 模式内部的预览/放映子状态。"""
+        return self._ppt_view_mode
 
     def _build_ui(self) -> None:
         """构建完整暗场、舞台内容和覆盖式控制层。"""
@@ -234,10 +241,20 @@ class MainWindow(QMainWindow):
 
     def _create_content(self) -> QStackedWidget:
         """创建空状态和整窗舞台。"""
+        self.preview_workspace = PptPreviewWorkspace()
+        self.preview_workspace.page_selected.connect(self._on_preview_page_selected)
+        self.preview_workspace.import_requested.connect(self.open_file)
+        self.preview_workspace.slideshow_requested.connect(
+            lambda: self.set_ppt_view_mode("slideshow")
+        )
+
         self.workspace = StageWorkspace()
         self.workspace.page_changed.connect(self._on_workspace_page_changed)
         self.workspace.mode_changed.connect(self._on_workspace_mode_changed)
         self.workspace.zoom_changed.connect(self._on_workspace_zoom_changed)
+        self.workspace.viewer.double_clicked.connect(
+            lambda: self.set_ppt_view_mode("preview")
+        )
 
         empty = QWidget()
         empty_layout = QVBoxLayout(empty)
@@ -257,6 +274,7 @@ class MainWindow(QMainWindow):
 
         stack = QStackedWidget()
         stack.addWidget(empty)
+        stack.addWidget(self.preview_workspace)
         stack.addWidget(self.workspace)
         stack.setCurrentWidget(empty)
         self.empty_page = empty
@@ -278,6 +296,7 @@ class MainWindow(QMainWindow):
     def _set_importing_ui(self, importing: bool) -> None:
         """在导入期间锁定覆盖层并切换进度控件。"""
         self._importing = bool(importing)
+        self.preview_workspace.import_button.setEnabled(not self._importing)
         self.chrome.set_locked(self._importing)
         self.cancel_button.setVisible(self._importing)
         if self._importing:
@@ -323,18 +342,22 @@ class MainWindow(QMainWindow):
         self.status_label.setText(message)
 
     def _on_import_completed(self, result) -> None:
-        """加载项目并定位到上次使用的滚筒页。"""
+        """加载项目并默认进入带缩略图的 PPT 预览模式。"""
         self.project = result.project
         self._presentation_mode = "ppt"
+        self._ppt_view_mode = "preview"
         self.state.set_page_count(self.project.slide_count)
         current = max(0, min(self.project.current_slide, self.state.page_count - 1))
         self.state.current_page = current
         self.workspace.set_project(self.project, current, initial_mode="stage")
-        self.content_stack.setCurrentWidget(self.workspace)
+        self.preview_workspace.set_project(self.project, current)
+        self.content_stack.setCurrentWidget(self.preview_workspace)
         self._set_project_controls_enabled(True)
         self._update_project_name()
         self._on_workspace_mode_changed(self.workspace.mode)
-        self.status_label.setText("缓存命中" if result.cache_hit else "4K 页面已导出")
+        status = "缓存命中" if result.cache_hit else "4K 页面已导出"
+        self.status_label.setText(status)
+        self.preview_workspace.set_status(status)
         self._update_counter()
         self._apply_mode_chrome()
 
@@ -353,8 +376,7 @@ class MainWindow(QMainWindow):
             self.worker = None
 
     def select_page(self, index: int) -> None:
-        if self.project:
-            self.workspace.select_page(index)
+        self._select_page(index, source="external")
 
     def previous_page(self) -> None:
         if self.project:
@@ -377,6 +399,18 @@ class MainWindow(QMainWindow):
         if self.project:
             self.workspace.reset_zoom()
 
+    def set_ppt_view_mode(self, mode: str) -> None:
+        """切换 PPT 预览/放映子模式，不改变当前页。"""
+        if mode not in {"preview", "slideshow"}:
+            raise ValueError(f"未知 PPT 视图模式：{mode}")
+        self._ppt_view_mode = mode
+        self._slide_number_buffer = ""
+        if self._presentation_mode != "ppt" or not self.project:
+            return
+        if mode == "slideshow" and self.workspace.mode == "carousel":
+            self.workspace.enter_stage(self.workspace.current_index)
+        self._on_workspace_mode_changed(self.workspace.mode)
+
     def toggle_workspace_mode(self) -> None:
         """切换顶层 PPT/手势模式，保留手势模式内部的两级视图。"""
         if not self.project:
@@ -384,6 +418,7 @@ class MainWindow(QMainWindow):
         self._slide_number_buffer = ""
         if self._presentation_mode == "ppt":
             self._presentation_mode = "gesture"
+            self.content_stack.setCurrentWidget(self.workspace)
             self.workspace.show_carousel()
             return
         self._presentation_mode = "ppt"
@@ -402,22 +437,39 @@ class MainWindow(QMainWindow):
             self.chrome.hide_now()
 
     def _on_workspace_page_changed(self, index: int) -> None:
-        self.state.current_page = index
-        if self.project:
-            self.project.current_slide = index
+        self._select_page(index, source="workspace")
+
+    def _on_preview_page_selected(self, index: int) -> None:
+        """将预览缩略图选择同步到放映和手势工作区。"""
+        self._select_page(index, source="preview")
+
+    def _select_page(self, index: int, *, source: str) -> None:
+        """统一同步预览、放映和项目页码，避免组件间递归调用。"""
+        if not self.project or not 0 <= index < self.state.page_count:
+            return
+        self.state.select(index)
+        self.project.current_slide = index
+        if source != "workspace":
+            self.workspace.select_page(index)
+        self.preview_workspace.select_page(index, emit=False)
         self._update_counter()
 
     def _on_workspace_mode_changed(self, mode: str) -> None:
         is_ppt = self._presentation_mode == "ppt"
+        is_ppt_slideshow = is_ppt and self._ppt_view_mode == "slideshow"
         is_gesture_stage = not is_ppt and mode == "stage"
         self.mode_button.setIcon(line_icon("grid" if is_ppt else "stage"))
         self.mode_button.setToolTip("进入手势模式" if is_ppt else "返回PPT模式")
         if is_ppt:
-            self.status_label.setText("PPT模式")
+            self.status_label.setText("PPT模式 · 放映" if is_ppt_slideshow else "PPT模式 · 预览")
+            self.content_stack.setCurrentWidget(
+                self.workspace if is_ppt_slideshow else self.preview_workspace
+            )
         else:
             self.status_label.setText("手势模式 · 单页" if is_gesture_stage else "手势模式 · 滚筒")
-        self.workspace.viewer.set_powerpoint_mode(is_ppt)
-        self.workspace.viewer.set_fit_margin(0 if is_ppt else STAGE_SAFE_MARGIN)
+            self.content_stack.setCurrentWidget(self.workspace)
+        self.workspace.viewer.set_interaction_mode("slideshow" if is_ppt_slideshow else "gesture")
+        self.workspace.viewer.set_fit_margin(0 if is_ppt_slideshow else STAGE_SAFE_MARGIN)
         for action in (self.zoom_out_action, self.reset_action, self.zoom_in_action, self.fit_action):
             action.setEnabled(is_gesture_stage)
         for widget in self.zoom_widgets:
@@ -466,7 +518,12 @@ class MainWindow(QMainWindow):
     def keyPressEvent(self, event) -> None:  # noqa: N802
         """处理舞台翻页、首尾页和两级 Esc 行为。"""
         key = event.key()
-        if self.project and self._presentation_mode == "ppt" and self._handle_powerpoint_key(event):
+        if (
+            self.project
+            and self._presentation_mode == "ppt"
+            and self._ppt_view_mode == "slideshow"
+            and self._handle_powerpoint_key(event)
+        ):
             return
         self._slide_number_buffer = ""
         if key in (Qt.Key.Key_Right, Qt.Key.Key_Down, Qt.Key.Key_Space):
@@ -535,6 +592,7 @@ class MainWindow(QMainWindow):
         if key == Qt.Key.Key_Escape:
             if self.isFullScreen():
                 self.showNormal()
+            self.set_ppt_view_mode("preview")
             event.accept()
             return True
         return False

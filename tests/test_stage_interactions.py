@@ -308,8 +308,8 @@ def test_workspace_can_start_in_single_slide_stage(qapp, pages):
     assert workspace._transition.state() == QAbstractAnimation.State.Stopped
 
 
-def test_main_window_import_defaults_to_single_slide_stage(qapp, monkeypatch, tmp_path, pages):
-    """主窗口导入完成后默认是普通放映界面。"""
+def test_main_window_import_defaults_to_ppt_preview_mode(qapp, monkeypatch, tmp_path, pages):
+    """主窗口导入完成后默认显示带缩略图和导入按钮的预览界面。"""
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     window = MainWindow()
     window.show()
@@ -318,15 +318,62 @@ def test_main_window_import_defaults_to_single_slide_stage(qapp, monkeypatch, tm
     window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
     qapp.processEvents()
     assert window.presentation_mode == "ppt"
+    assert window.ppt_view_mode == "preview"
     assert window.workspace.mode == "stage"
+    assert window.content_stack.currentWidget() is window.preview_workspace
+    assert window.preview_workspace.import_button.isVisible()
     assert window.mode_button.toolTip() == "进入手势模式"
     assert window.top_bar.isHidden()
     assert window.bottom_bar.isHidden()
     window.close()
 
 
+def test_preview_and_slideshow_double_click_toggle_without_page_change(qapp, monkeypatch, tmp_path, pages):
+    """中央页双击双向切换预览和放映，并保持当前页。"""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    window.show()
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    window.select_page(1)
+    qapp.processEvents()
+
+    QTest.mouseDClick(window.preview_workspace.viewer.viewport(), Qt.MouseButton.LeftButton)
+    qapp.processEvents()
+    assert window.ppt_view_mode == "slideshow"
+    assert window.content_stack.currentWidget() is window.workspace
+
+    QTest.mouseClick(window.workspace.viewer.viewport(), Qt.MouseButton.LeftButton)
+    QTest.mouseDClick(window.workspace.viewer.viewport(), Qt.MouseButton.LeftButton)
+    QTest.qWait(QApplication.doubleClickInterval() + 20)
+    assert window.ppt_view_mode == "preview"
+    assert window.state.current_page == 1
+    assert window.workspace.current_index == 1
+    window.close()
+
+
+def test_preview_and_stage_keep_current_page_synchronized(qapp, monkeypatch, tmp_path, pages):
+    """缩略图和舞台切页都同步到同一个当前页。"""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    window.show()
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    qapp.processEvents()
+
+    window.preview_workspace.thumbnail_panel.setCurrentRow(2)
+    assert window.workspace.current_index == 2
+    assert window.state.current_page == 2
+
+    window.workspace.select_page(1)
+    assert window.preview_workspace.current_index == 1
+    assert window.preview_workspace.thumbnail_panel.currentRow() == 1
+    assert window.state.current_page == 1
+    window.close()
+
+
 def test_mode_shortcut_toggles_gesture_and_powerpoint_modes(qapp, monkeypatch, tmp_path, pages):
-    """同一快捷键进入手势模式，也能返回纯 PPT 放映模式。"""
+    """同一快捷键进入手势模式，也能返回最近的 PPT 子模式。"""
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     window = MainWindow()
     window.show()
@@ -344,7 +391,9 @@ def test_mode_shortcut_toggles_gesture_and_powerpoint_modes(qapp, monkeypatch, t
     window.toggle_presentation_mode_action.trigger()
     qapp.processEvents()
     assert window.presentation_mode == "ppt"
+    assert window.ppt_view_mode == "preview"
     assert window.workspace.mode == "stage"
+    assert window.content_stack.currentWidget() is window.preview_workspace
     assert window.mode_button.toolTip() == "进入手势模式"
     assert window.top_bar.isHidden()
     assert window.bottom_bar.isHidden()
@@ -397,6 +446,7 @@ def test_mode_shortcut_returns_from_gesture_stage_to_powerpoint(qapp, monkeypatc
     window.show()
     project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
     window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    window.set_ppt_view_mode("slideshow")
     window.toggle_presentation_mode_action.trigger()
     window.workspace.carousel.activate_page(window.workspace.current_index)
     qapp.processEvents()
@@ -405,7 +455,9 @@ def test_mode_shortcut_returns_from_gesture_stage_to_powerpoint(qapp, monkeypatc
     qapp.processEvents()
 
     assert window.presentation_mode == "ppt"
+    assert window.ppt_view_mode == "slideshow"
     assert window.workspace.mode == "stage"
+    assert window.content_stack.currentWidget() is window.workspace
     assert window.top_bar.isHidden()
     assert window.bottom_bar.isHidden()
     window.close()
@@ -418,6 +470,7 @@ def test_powerpoint_mode_uses_slide_show_keyboard_navigation(qapp, monkeypatch, 
     window.show()
     project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
     window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    window.set_ppt_view_mode("slideshow")
     qapp.processEvents()
 
     QTest.keyClick(window, Qt.Key.Key_N)
@@ -442,6 +495,7 @@ def test_powerpoint_mode_left_click_advances_slide(qapp, monkeypatch, tmp_path, 
     window.show()
     project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
     window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    window.set_ppt_view_mode("slideshow")
     qapp.processEvents()
 
     QTest.mouseClick(window.workspace.viewer.viewport(), Qt.MouseButton.LeftButton)
@@ -460,6 +514,7 @@ def test_powerpoint_mode_wheel_navigates_without_zoom(qapp, monkeypatch, tmp_pat
     window.show()
     project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
     window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    window.set_ppt_view_mode("slideshow")
     qapp.processEvents()
 
     _send_wheel(window.workspace.viewer, -120)
@@ -495,6 +550,7 @@ def test_powerpoint_mode_number_enter_jumps_to_slide(qapp, monkeypatch, tmp_path
     window.show()
     project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
     window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    window.set_ppt_view_mode("slideshow")
     qapp.processEvents()
 
     QTest.keyClicks(window, "3")
@@ -506,16 +562,20 @@ def test_powerpoint_mode_number_enter_jumps_to_slide(qapp, monkeypatch, tmp_path
     window.close()
 
 
-def test_escape_in_powerpoint_mode_does_not_enter_gesture_mode(qapp, monkeypatch, tmp_path, pages):
-    """Esc 按 PowerPoint 习惯处理，不再把 PPT 模式切到手势模式。"""
+def test_escape_in_slideshow_returns_to_preview(qapp, monkeypatch, tmp_path, pages):
+    """PPT 放映按 Esc 返回预览，不进入手势模式。"""
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     window = MainWindow()
     window.show()
     project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
     window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    window.set_ppt_view_mode("slideshow")
     qapp.processEvents()
 
     QTest.keyClick(window, Qt.Key.Key_Escape)
+    assert window.presentation_mode == "ppt"
+    assert window.ppt_view_mode == "preview"
+    assert window.content_stack.currentWidget() is window.preview_workspace
     assert window.workspace.mode == "stage"
     assert window.workspace.current_index == 0
     window.close()
@@ -611,11 +671,12 @@ def test_workspace_navigation_does_not_wrap(qapp, pages):
     assert workspace.current_index == 1
 
 
-def test_main_window_uses_full_stage_without_sidebar_or_toolbar(qapp, monkeypatch, tmp_path):
+def test_main_window_keeps_sidebar_in_preview_only(qapp, monkeypatch, tmp_path):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     window = MainWindow()
     assert isinstance(window.workspace, StageWorkspace)
-    assert window.findChildren(QSplitter) == []
+    assert window.findChildren(QSplitter) == [window.preview_workspace.splitter]
+    assert window.workspace.findChildren(QSplitter) == []
     assert window.findChildren(QToolBar) == []
     window.close()
 
