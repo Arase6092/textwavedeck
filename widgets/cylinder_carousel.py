@@ -208,14 +208,8 @@ class CylinderCarousel(QGraphicsView):
         self._set_offset(float(self._animation_target), commit=True)
 
     def drawBackground(self, painter: QPainter, rect) -> None:  # noqa: N802
-        """绘制固定暗场和不随滚筒移动的水平参照线。"""
+        """绘制固定暗场渐变，不再添加横穿舞台的参照线。"""
         painter.fillRect(rect, stage_background_gradient(rect))
-        pen = QPen(QColor(STRUCTURE_LINE))
-        pen.setWidth(1)
-        pen.setCosmetic(True)
-        painter.setPen(pen)
-        y = self.sceneRect().center().y() + 8
-        painter.drawLine(rect.left(), y, rect.right(), y)
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         """窗口变化时重新计算舞台半径和页面尺寸。"""

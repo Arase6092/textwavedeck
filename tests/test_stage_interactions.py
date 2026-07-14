@@ -4,7 +4,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import QAbstractAnimation
+from PySide6.QtCore import QAbstractAnimation, QRectF
 from PySide6.QtWidgets import QApplication, QSplitter, QToolBar
 
 from app.main_window import MainWindow
@@ -59,6 +59,27 @@ def test_carousel_only_decodes_five_visible_thumbnails(qapp, pages):
     loaded = sum(not item.pixmap.pixmap().isNull() for item in carousel._items)
     assert loaded <= 5
 
+
+
+def test_carousel_background_has_no_horizontal_reference_line(qapp):
+    class FakePainter:
+        """记录背景绘制调用，确保舞台中线不会回归。"""
+
+        def __init__(self):
+            self.fill_calls = 0
+            self.line_calls = 0
+
+        def fillRect(self, *_args):
+            self.fill_calls += 1
+
+        def drawLine(self, *_args):
+            self.line_calls += 1
+
+    carousel = CylinderCarousel()
+    painter = FakePainter()
+    carousel.drawBackground(painter, QRectF(0, 0, 800, 520))
+    assert painter.fill_calls == 1
+    assert painter.line_calls == 0
 
 def test_reduced_motion_selects_without_animation(qapp, pages):
     carousel = CylinderCarousel()
