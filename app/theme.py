@@ -10,10 +10,11 @@ from ctypes import wintypes
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 
-STAGE_BACKGROUND = "#07080B"
-STAGE_GRADIENT_TOP = "#080A10"
-STAGE_GRADIENT_CENTER = "#131923"
-STAGE_GRADIENT_BOTTOM = "#090B11"
+STAGE_BACKGROUND = "#080A0B"
+STAGE_GRADIENT_TOP = "#080A0B"
+STAGE_GRADIENT_MID = "#111817"
+STAGE_GRADIENT_CENTER = "#18221F"
+STAGE_GRADIENT_BOTTOM = "#090B0E"
 CONTROL_SURFACE = "#111318"
 HOVER_SURFACE = "#191D24"
 STRUCTURE_LINE = "#303641"
@@ -34,11 +35,12 @@ STAGE_SAFE_MARGIN = 72
 
 
 def stage_background_qss() -> str:
-    """返回 Qt 样式表可用的低对比暗色舞台渐变。"""
+    """返回 Qt 样式表可用的石墨青绿四段渐变。"""
     return (
         "qlineargradient(x1: 0, y1: 0, x2: 1, y2: 1, "
         f"stop: 0 {STAGE_GRADIENT_TOP}, "
-        f"stop: 0.52 {STAGE_GRADIENT_CENTER}, "
+        f"stop: 0.35 {STAGE_GRADIENT_MID}, "
+        f"stop: 0.64 {STAGE_GRADIENT_CENTER}, "
         f"stop: 1 {STAGE_GRADIENT_BOTTOM})"
     )
 
@@ -47,7 +49,8 @@ def stage_background_gradient(rect: QRectF) -> QLinearGradient:
     """生成舞台绘制层使用的固定暗色渐变，避免页面移动时背景跟着动。"""
     gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
     gradient.setColorAt(0.0, QColor(STAGE_GRADIENT_TOP))
-    gradient.setColorAt(0.52, QColor(STAGE_GRADIENT_CENTER))
+    gradient.setColorAt(0.35, QColor(STAGE_GRADIENT_MID))
+    gradient.setColorAt(0.64, QColor(STAGE_GRADIENT_CENTER))
     gradient.setColorAt(1.0, QColor(STAGE_GRADIENT_BOTTOM))
     return gradient
 
