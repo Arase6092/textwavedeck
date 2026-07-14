@@ -9,9 +9,13 @@ from app.theme import (
     BOTTOM_CHROME_HEIGHT,
     FOCUS_BLUE,
     STAGE_BACKGROUND,
+    STAGE_GRADIENT_BOTTOM,
+    STAGE_GRADIENT_CENTER,
+    STAGE_GRADIENT_TOP,
     STAGE_SAFE_MARGIN,
     application_stylesheet,
     line_icon,
+    stage_background_qss,
     reduced_motion_enabled,
 )
 
@@ -26,8 +30,11 @@ def test_dark_theme_exposes_approved_tokens():
     assert STAGE_BACKGROUND == "#07080B"
     assert FOCUS_BLUE == "#3B6FFF"
     stylesheet = application_stylesheet()
-    assert "#07080B" in stylesheet
+    assert STAGE_GRADIENT_TOP in stylesheet
+    assert STAGE_GRADIENT_CENTER in stylesheet
+    assert STAGE_GRADIENT_BOTTOM in stylesheet
     assert "#3B6FFF" in stylesheet
+    assert "qlineargradient" in stage_background_qss()
     assert "Segoe UI Variable" in stylesheet
 
 

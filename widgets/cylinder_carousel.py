@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QGraphicsView,
 )
 
-from app.theme import CONTROL_SURFACE, FOCUS_BLUE, PRIMARY_TEXT, STAGE_BACKGROUND, STRUCTURE_LINE
+from app.theme import CONTROL_SURFACE, FOCUS_BLUE, PRIMARY_TEXT, STAGE_BACKGROUND, STRUCTURE_LINE, stage_background_gradient
 from models.slide_project import SlidePage
 from widgets.cylinder_geometry import cylinder_pose, inertia_target, snap_index
 
@@ -209,7 +209,7 @@ class CylinderCarousel(QGraphicsView):
 
     def drawBackground(self, painter: QPainter, rect) -> None:  # noqa: N802
         """绘制固定暗场和不随滚筒移动的水平参照线。"""
-        painter.fillRect(rect, QColor(STAGE_BACKGROUND))
+        painter.fillRect(rect, stage_background_gradient(rect))
         pen = QPen(QColor(STRUCTURE_LINE))
         pen.setWidth(1)
         pen.setCosmetic(True)

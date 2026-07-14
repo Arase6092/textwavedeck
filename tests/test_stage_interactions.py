@@ -8,6 +8,7 @@ from PySide6.QtCore import QAbstractAnimation
 from PySide6.QtWidgets import QApplication, QSplitter, QToolBar
 
 from app.main_window import MainWindow
+from app.theme import STAGE_GRADIENT_BOTTOM, STAGE_GRADIENT_CENTER, STAGE_GRADIENT_TOP
 from models.slide_project import SlidePage, SlideProject
 from widgets.cylinder_carousel import CylinderCarousel
 from widgets.slide_viewer import SlideViewer, classify_release
@@ -146,7 +147,11 @@ def test_main_window_uses_overlay_dark_chrome(qapp, monkeypatch, tmp_path):
     assert window.top_bar.parent() is window.stage_root
     assert window.bottom_bar.parent() is window.stage_root
     assert window.content_stack.geometry() == window.stage_root.rect()
-    assert "#07080B" in window.styleSheet()
+    stylesheet = window.styleSheet()
+    assert "qlineargradient" in stylesheet
+    assert STAGE_GRADIENT_TOP in stylesheet
+    assert STAGE_GRADIENT_CENTER in stylesheet
+    assert STAGE_GRADIENT_BOTTOM in stylesheet
     assert all(widget.isHidden() for widget in window.zoom_widgets)
     window.close()
 

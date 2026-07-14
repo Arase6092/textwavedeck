@@ -8,7 +8,7 @@ from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPixmap
 from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView
 
-from app.theme import STAGE_BACKGROUND, STAGE_SAFE_MARGIN
+from app.theme import STAGE_BACKGROUND, STAGE_SAFE_MARGIN, stage_background_gradient
 
 
 def classify_release(
@@ -171,6 +171,10 @@ class SlideViewer(QGraphicsView):
             event.accept()
             return
         super().mouseDoubleClickEvent(event)
+
+    def drawBackground(self, painter, rect) -> None:  # noqa: N802
+        """绘制固定暗色渐变背景，避免单页舞台变成纯黑画布。"""
+        painter.fillRect(rect, stage_background_gradient(rect))
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         """适应窗口模式下随舞台大小重新计算显示比例。"""

@@ -8,9 +8,12 @@ import sys
 from ctypes import wintypes
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 
 STAGE_BACKGROUND = "#07080B"
+STAGE_GRADIENT_TOP = "#080A10"
+STAGE_GRADIENT_CENTER = "#131923"
+STAGE_GRADIENT_BOTTOM = "#090B11"
 CONTROL_SURFACE = "#111318"
 HOVER_SURFACE = "#191D24"
 STRUCTURE_LINE = "#303641"
@@ -28,6 +31,25 @@ CHROME_HIDE_DELAY_MS = 2000
 CHROME_FADE_DURATION_MS = 160
 MODE_REVEAL_DURATION_MS = 1500
 STAGE_SAFE_MARGIN = 72
+
+
+def stage_background_qss() -> str:
+    """返回 Qt 样式表可用的低对比暗色舞台渐变。"""
+    return (
+        "qlineargradient(x1: 0, y1: 0, x2: 1, y2: 1, "
+        f"stop: 0 {STAGE_GRADIENT_TOP}, "
+        f"stop: 0.52 {STAGE_GRADIENT_CENTER}, "
+        f"stop: 1 {STAGE_GRADIENT_BOTTOM})"
+    )
+
+
+def stage_background_gradient(rect: QRectF) -> QLinearGradient:
+    """生成舞台绘制层使用的固定暗色渐变，避免页面移动时背景跟着动。"""
+    gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
+    gradient.setColorAt(0.0, QColor(STAGE_GRADIENT_TOP))
+    gradient.setColorAt(0.52, QColor(STAGE_GRADIENT_CENTER))
+    gradient.setColorAt(1.0, QColor(STAGE_GRADIENT_BOTTOM))
+    return gradient
 
 
 def line_icon(name: str, color: str = PRIMARY_TEXT) -> QIcon:
@@ -96,9 +118,10 @@ def reduced_motion_enabled() -> bool:
 
 def application_stylesheet() -> str:
     """返回主窗口共享的完整暗场样式。"""
+    stage_background = stage_background_qss()
     return f"""
         QMainWindow, QWidget {{
-            background: {STAGE_BACKGROUND};
+            background: {stage_background};
             color: {PRIMARY_TEXT};
             font-family: 'Segoe UI Variable', 'Segoe UI';
             letter-spacing: 0px;
@@ -152,7 +175,7 @@ def application_stylesheet() -> str:
         }}
         QProgressBar::chunk {{ background: {FOCUS_BLUE}; }}
         QGraphicsView#cylinderCarousel, QGraphicsView#slideViewer {{
-            background: {STAGE_BACKGROUND};
+            background: {stage_background};
             border: 0;
         }}
         QMessageBox {{ background: {CONTROL_SURFACE}; }}
