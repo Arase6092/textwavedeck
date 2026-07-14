@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Signal, QSize, Qt
+from PySide6.QtCore import QSignalBlocker, Signal, QSize, Qt
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import QListWidget, QListWidgetItem
 
@@ -36,11 +36,14 @@ class ThumbnailPanel(QListWidget):
             self.setCurrentRow(0)
         self.blockSignals(False)
 
-    def select_page(self, index: int) -> None:
-        """选中指定页面并滚动到可见区域。"""
-        if 0 <= index < self.count():
-            self.setCurrentRow(index)
-            self.scrollToItem(self.item(index))
+    def select_page(self, index: int, *, emit: bool = True) -> None:
+        """选中并显示指定缩略图；同步更新时可禁止重复发出信号。"""
+        if not 0 <= index < self.count():
+            return
+        blocker = None if emit else QSignalBlocker(self)
+        self.setCurrentRow(index)
+        self.scrollToItem(self.item(index))
+        del blocker
 
     def _on_row_changed(self, row: int) -> None:
         """将列表行变化转成页面命令。"""

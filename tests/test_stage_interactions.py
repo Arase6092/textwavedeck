@@ -18,6 +18,7 @@ from widgets.cylinder_geometry import CarouselLayer
 from widgets.slide_viewer import SlideViewer, classify_release
 from widgets.stage_recomposition_overlay import StageRecompositionOverlay
 from widgets.stage_workspace import StageWorkspace
+from widgets.thumbnail_panel import ThumbnailPanel
 
 
 def _send_wheel(viewer: SlideViewer, delta: int) -> None:
@@ -237,6 +238,60 @@ def test_slideshow_double_click_cancels_pending_single_click(qapp, pages):
     assert double_spy.count() == 1
     assert next_spy.count() == 0
     viewer.close()
+
+
+def test_thumbnail_panel_can_select_page_without_reemitting(qapp, pages):
+    """主窗口同步缩略图时不能递归触发页面选择。"""
+    panel = ThumbnailPanel()
+    panel.set_pages(pages)
+    selected = QSignalSpy(panel.page_selected)
+
+    panel.select_page(2, emit=False)
+
+    assert panel.currentRow() == 2
+    assert selected.count() == 0
+
+
+def test_preview_workspace_builds_normal_view_and_exposes_import(qapp, pages):
+    """预览工作区包含缩略图、只读主页面和明确导入入口。"""
+    from widgets.ppt_preview_workspace import PptPreviewWorkspace
+
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    preview = PptPreviewWorkspace()
+    preview.resize(1200, 760)
+    preview.set_project(project, current_index=1)
+    preview.show()
+    qapp.processEvents()
+
+    assert preview.thumbnail_panel.count() == len(pages)
+    assert preview.thumbnail_panel.currentRow() == 1
+    assert preview.import_button.text() == "导入 PPT"
+    assert preview.import_button.isVisible()
+    assert preview.viewer.interaction_mode == "preview"
+    assert preview.page_label.text() == f"幻灯片 2 / {len(pages)}"
+    preview.close()
+
+
+def test_preview_workspace_emits_user_page_and_slideshow_requests(qapp, pages):
+    """缩略图选择与中央页双击通过清晰信号交给主窗口。"""
+    from widgets.ppt_preview_workspace import PptPreviewWorkspace
+
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    preview = PptPreviewWorkspace()
+    preview.resize(1200, 760)
+    preview.set_project(project, current_index=0)
+    preview.show()
+    qapp.processEvents()
+    page_spy = QSignalSpy(preview.page_selected)
+    slideshow_spy = QSignalSpy(preview.slideshow_requested)
+
+    preview.thumbnail_panel.setCurrentRow(2)
+    QTest.mouseDClick(preview.viewer.viewport(), Qt.MouseButton.LeftButton)
+
+    assert page_spy.count() == 1
+    assert page_spy.at(0) == [2]
+    assert slideshow_spy.count() == 1
+    preview.close()
 
 
 
