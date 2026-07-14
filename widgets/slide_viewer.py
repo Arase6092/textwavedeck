@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtCore import QPoint, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPixmap
-from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView
+from PySide6.QtWidgets import QApplication, QGraphicsPixmapItem, QGraphicsScene, QGraphicsView
 
 from app.theme import STAGE_BACKGROUND, STAGE_SAFE_MARGIN, stage_background_gradient
 
@@ -29,7 +29,9 @@ class SlideViewer(QGraphicsView):
 
     previous_requested = Signal()
     next_requested = Signal()
+    double_clicked = Signal()
     fit_mode_changed = Signal(bool)
+    VALID_INTERACTION_MODES = {"gesture", "preview", "slideshow"}
 
     def __init__(self) -> None:
         super().__init__()
@@ -38,9 +40,12 @@ class SlideViewer(QGraphicsView):
         self._zoom = 1.0
         self._fit_mode = True
         self._fit_margin = STAGE_SAFE_MARGIN
-        self._powerpoint_mode = False
+        self._interaction_mode = "gesture"
         self._drag_start: QPoint | None = None
         self._press_point: QPoint | None = None
+        self._single_click_timer = QTimer(self)
+        self._single_click_timer.setSingleShot(True)
+        self._single_click_timer.timeout.connect(self._emit_delayed_slideshow_click)
         self.setBackgroundBrush(QColor(STAGE_BACKGROUND))
         self.setFrameShape(QGraphicsView.Shape.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -110,10 +115,27 @@ class SlideViewer(QGraphicsView):
             self.fit_in_view()
 
     def set_powerpoint_mode(self, enabled: bool) -> None:
-        """切换 PowerPoint 放映鼠标策略，避免与手势单页交互混用。"""
-        self._powerpoint_mode = bool(enabled)
+        """兼容旧调用，映射为放映或手势交互策略。"""
+        self.set_interaction_mode("slideshow" if enabled else "gesture")
+
+    @property
+    def interaction_mode(self) -> str:
+        """返回当前鼠标交互策略。"""
+        return self._interaction_mode
+
+    def set_interaction_mode(self, mode: str) -> None:
+        """设置手势、预览或放映鼠标策略，并清理待处理点击。"""
+        if mode not in self.VALID_INTERACTION_MODES:
+            raise ValueError(f"未知页面交互模式：{mode}")
+        self._interaction_mode = mode
+        self._single_click_timer.stop()
         self._drag_start = None
         self._press_point = None
+
+    def _emit_delayed_slideshow_click(self) -> None:
+        """双击判定结束后再执行放映单击翻页。"""
+        if self._interaction_mode == "slideshow":
+            self.next_requested.emit()
 
     def _set_fit_mode(self, value: bool) -> None:
         if self._fit_mode != value:
@@ -122,12 +144,15 @@ class SlideViewer(QGraphicsView):
 
     def wheelEvent(self, event) -> None:  # noqa: N802
         """滚轮缩放；按住 Ctrl 时也支持缩放。"""
-        if self._powerpoint_mode:
+        if self._interaction_mode == "slideshow":
             delta = event.angleDelta().x() or event.angleDelta().y()
             if delta > 0:
                 self.previous_requested.emit()
             elif delta < 0:
                 self.next_requested.emit()
+            event.accept()
+            return
+        if self._interaction_mode == "preview":
             event.accept()
             return
         delta = 0.1 if event.angleDelta().y() > 0 else -0.1
@@ -137,7 +162,7 @@ class SlideViewer(QGraphicsView):
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         """按住左键进入拖动模式。"""
         if event.button() == Qt.MouseButton.LeftButton:
-            if self._powerpoint_mode:
+            if self._interaction_mode != "gesture":
                 self._press_point = event.position().toPoint()
                 event.accept()
                 return
@@ -150,7 +175,7 @@ class SlideViewer(QGraphicsView):
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         """拖动已放大的图片。"""
-        if self._powerpoint_mode and self._press_point is not None:
+        if self._interaction_mode != "gesture" and self._press_point is not None:
             event.accept()
             return
         if self._drag_start is not None:
@@ -176,9 +201,12 @@ class SlideViewer(QGraphicsView):
             press_point = self._press_point
             self._drag_start = None
             self._press_point = None
-            if self._powerpoint_mode:
+            if self._interaction_mode == "slideshow":
                 if press_point is not None and (release_point - press_point).manhattanLength() < 7:
-                    self.next_requested.emit()
+                    self._single_click_timer.start(QApplication.doubleClickInterval())
+                event.accept()
+                return
+            if self._interaction_mode == "preview":
                 event.accept()
                 return
             self.setCursor(Qt.CursorShape.ArrowCursor)
@@ -198,7 +226,10 @@ class SlideViewer(QGraphicsView):
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         """双击在适应窗口和 100% 原始比例间切换。"""
         if event.button() == Qt.MouseButton.LeftButton:
-            if self._powerpoint_mode:
+            if self._interaction_mode in {"preview", "slideshow"}:
+                self._single_click_timer.stop()
+                self._press_point = None
+                self.double_clicked.emit()
                 event.accept()
                 return
             if self._fit_mode:

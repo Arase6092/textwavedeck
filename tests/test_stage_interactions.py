@@ -7,7 +7,7 @@ import pytest
 from PIL import Image
 from PySide6.QtCore import QAbstractAnimation, QPoint, QPointF, QRectF, Qt
 from PySide6.QtGui import QKeySequence, QPixmap, QWheelEvent
-from PySide6.QtTest import QTest
+from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication, QSplitter, QToolBar
 
 from app.main_window import MainWindow
@@ -184,6 +184,61 @@ def test_viewer_can_match_powerpoint_slide_show_frame(qapp, tmp_path):
     viewer.close()
 
 
+def test_preview_viewer_click_is_idle_and_double_click_requests_slideshow(qapp, pages):
+    """预览页单击不翻页，双击只请求进入放映。"""
+    viewer = SlideViewer()
+    viewer.resize(800, 600)
+    viewer.show()
+    viewer.show_image(pages[0].image_path)
+    viewer.set_interaction_mode("preview")
+    next_spy = QSignalSpy(viewer.next_requested)
+    double_spy = QSignalSpy(viewer.double_clicked)
+
+    QTest.mouseClick(viewer.viewport(), Qt.MouseButton.LeftButton)
+    qapp.processEvents()
+    assert next_spy.count() == 0
+
+    QTest.mouseDClick(viewer.viewport(), Qt.MouseButton.LeftButton)
+    QTest.qWait(QApplication.doubleClickInterval() + 20)
+    assert double_spy.count() == 1
+    assert next_spy.count() == 0
+    viewer.close()
+
+
+def test_slideshow_single_click_advances_after_double_click_window(qapp, pages):
+    """放映单击在系统双击判定结束后执行翻页。"""
+    viewer = SlideViewer()
+    viewer.resize(800, 600)
+    viewer.show()
+    viewer.show_image(pages[0].image_path)
+    viewer.set_interaction_mode("slideshow")
+    next_spy = QSignalSpy(viewer.next_requested)
+
+    QTest.mouseClick(viewer.viewport(), Qt.MouseButton.LeftButton)
+    assert next_spy.count() == 0
+    QTest.qWait(QApplication.doubleClickInterval() + 20)
+    assert next_spy.count() == 1
+    viewer.close()
+
+
+def test_slideshow_double_click_cancels_pending_single_click(qapp, pages):
+    """放映双击返回预览时不能先触发一次下一页。"""
+    viewer = SlideViewer()
+    viewer.resize(800, 600)
+    viewer.show()
+    viewer.show_image(pages[0].image_path)
+    viewer.set_interaction_mode("slideshow")
+    next_spy = QSignalSpy(viewer.next_requested)
+    double_spy = QSignalSpy(viewer.double_clicked)
+
+    QTest.mouseClick(viewer.viewport(), Qt.MouseButton.LeftButton)
+    QTest.mouseDClick(viewer.viewport(), Qt.MouseButton.LeftButton)
+    QTest.qWait(QApplication.doubleClickInterval() + 20)
+    assert double_spy.count() == 1
+    assert next_spy.count() == 0
+    viewer.close()
+
+
 
 def test_workspace_can_start_in_single_slide_stage(qapp, pages):
     """导入后可直接进入普通单页放映，而不是先显示滚筒。"""
@@ -336,6 +391,8 @@ def test_powerpoint_mode_left_click_advances_slide(qapp, monkeypatch, tmp_path, 
 
     QTest.mouseClick(window.workspace.viewer.viewport(), Qt.MouseButton.LeftButton)
 
+    assert window.workspace.current_index == 0
+    QTest.qWait(QApplication.doubleClickInterval() + 20)
     assert window.workspace.current_index == 1
     assert window.workspace.zoom_factor == pytest.approx(1.0)
     window.close()
