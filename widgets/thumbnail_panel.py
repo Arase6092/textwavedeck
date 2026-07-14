@@ -14,10 +14,14 @@ class ThumbnailPanel(QListWidget):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setIconSize(QSize(180, 102))
-        self.setSpacing(10)
+        self.setIconSize(QSize(168, 95))
+        self.setGridSize(QSize(188, 126))
+        self.setSpacing(6)
         self.setResizeMode(QListWidget.ResizeMode.Adjust)
-        self.setViewMode(QListWidget.ViewMode.ListMode)
+        self.setViewMode(QListWidget.ViewMode.IconMode)
+        self.setFlow(QListWidget.Flow.TopToBottom)
+        self.setWrapping(False)
+        self.setUniformItemSizes(True)
         self.setMovement(QListWidget.Movement.Static)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.currentRowChanged.connect(self._on_row_changed)
@@ -28,7 +32,7 @@ class ThumbnailPanel(QListWidget):
         self.blockSignals(True)
         self.clear()
         for page in pages:
-            item = QListWidgetItem(QIcon(QPixmap(page.thumbnail_path)), f"第 {page.index + 1:02d} 页")
+            item = QListWidgetItem(QIcon(QPixmap(page.thumbnail_path)), f"{page.index + 1:02d}")
             item.setData(Qt.ItemDataRole.UserRole, page.index)
             item.setToolTip(f"切换到第 {page.index + 1} 页")
             self.addItem(item)

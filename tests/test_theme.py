@@ -69,6 +69,20 @@ def test_chrome_children_are_transparent_and_stage_clears_bottom_bar():
     assert STAGE_SAFE_MARGIN >= BOTTOM_CHROME_HEIGHT
 
 
+def test_preview_workspace_has_dedicated_normal_view_styles():
+    """预览命令区、缩略图和分隔条必须使用独立暗色样式。"""
+    stylesheet = application_stylesheet()
+    for selector in (
+        "QWidget#pptPreviewRoot",
+        "QFrame#pptPreviewCommandBar",
+        "QListWidget#pptThumbnailPane",
+        "QListWidget#pptThumbnailPane::item:selected",
+        "QSplitter#pptPreviewSplitter::handle",
+        "QListWidget#pptThumbnailPane QScrollBar:vertical",
+    ):
+        assert selector in stylesheet
+
+
 @pytest.mark.parametrize("name", ["open", "grid", "fullscreen"])
 def test_line_icons_keep_transparent_space(qapp, name):
     image = line_icon(name).pixmap(18, 18).toImage()

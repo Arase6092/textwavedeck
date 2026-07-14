@@ -181,6 +181,91 @@ def application_stylesheet() -> str:
             background: {stage_background};
             border: 0;
         }}
+        QWidget#pptPreviewRoot {{
+            background: #111817;
+        }}
+        QFrame#pptPreviewCommandBar, QFrame#pptPreviewStatusBar {{
+            background: #151C1B;
+            border: 0;
+        }}
+        QFrame#pptPreviewCommandBar {{ border-bottom: 1px solid #2A3532; }}
+        QFrame#pptPreviewStatusBar {{ border-top: 1px solid #2A3532; }}
+        QLabel#pptPreviewFileName {{
+            background: transparent;
+            color: {PRIMARY_TEXT};
+            font-size: 13px;
+            font-weight: 600;
+        }}
+        QLabel#pptPreviewPageLabel, QLabel#pptPreviewStatusLabel {{
+            background: transparent;
+            color: {SECONDARY_TEXT};
+            font-size: 12px;
+        }}
+        QPushButton#pptPreviewImportButton {{
+            min-width: 104px;
+            background: {FOCUS_BLUE};
+            color: #FFFFFF;
+            border: 1px solid {FOCUS_BLUE};
+            border-radius: 4px;
+            font-weight: 600;
+        }}
+        QPushButton#pptPreviewImportButton:hover {{
+            background: #315FDB;
+            border-color: #6E91FF;
+        }}
+        QListWidget#pptThumbnailPane {{
+            background: #0E1313;
+            color: {SECONDARY_TEXT};
+            border: 0;
+            padding: 8px 6px;
+            outline: 0;
+        }}
+        QListWidget#pptThumbnailPane::item {{
+            margin: 3px 2px;
+            padding: 7px 5px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+        }}
+        QListWidget#pptThumbnailPane::item:hover {{
+            background: #18211F;
+            border-color: #34413E;
+        }}
+        QListWidget#pptThumbnailPane::item:selected {{
+            background: #202A28;
+            color: {PRIMARY_TEXT};
+            border: 2px solid {FOCUS_BLUE};
+        }}
+        QListWidget#pptThumbnailPane QScrollBar:vertical {{
+            width: 10px;
+            margin: 2px;
+            background: #0E1313;
+            border: 0;
+        }}
+        QListWidget#pptThumbnailPane QScrollBar::handle:vertical {{
+            min-height: 36px;
+            background: #394742;
+            border-radius: 4px;
+        }}
+        QListWidget#pptThumbnailPane QScrollBar::handle:vertical:hover {{
+            background: #566761;
+        }}
+        QListWidget#pptThumbnailPane QScrollBar::add-line:vertical,
+        QListWidget#pptThumbnailPane QScrollBar::sub-line:vertical {{
+            height: 0;
+            background: transparent;
+            border: 0;
+        }}
+        QListWidget#pptThumbnailPane QScrollBar::add-page:vertical,
+        QListWidget#pptThumbnailPane QScrollBar::sub-page:vertical {{
+            background: transparent;
+        }}
+        QGraphicsView#pptPreviewViewer {{
+            background: {stage_background};
+            border: 0;
+        }}
+        QSplitter#pptPreviewSplitter::handle {{
+            background: #2A3532;
+        }}
         QMessageBox {{ background: {CONTROL_SURFACE}; }}
         QMessageBox QLabel {{ color: {PRIMARY_TEXT}; background: transparent; }}
     """

@@ -51,7 +51,7 @@ def _make_project() -> SlideProject:
 
 
 def main() -> int:
-    """捕获两种窗口尺寸下的 PPT 模式、手势模式和导入状态。"""
+    """捕获两种窗口尺寸下的 PPT 预览、放映、手势和导入状态。"""
     OUTPUT.mkdir(parents=True, exist_ok=True)
     app = QApplication.instance() or QApplication([])
     project = _make_project()
@@ -65,8 +65,24 @@ def main() -> int:
 
         window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
         app.processEvents()
-        ppt_mode_path = OUTPUT / f"ppt-mode-{width}x{height}.png"
-        assert window.grab().save(str(ppt_mode_path))
+        assert window.ppt_view_mode == "preview"
+        assert window.preview_workspace.import_button.isVisible()
+        thumbnail_width = window.preview_workspace.thumbnail_panel.width()
+        assert window.preview_workspace.MIN_THUMBNAIL_WIDTH <= thumbnail_width
+        assert thumbnail_width <= window.preview_workspace.MAX_THUMBNAIL_WIDTH
+        assert window.preview_workspace.viewer.viewport().width() > thumbnail_width * 2
+        ppt_preview_path = OUTPUT / f"ppt-preview-{width}x{height}.png"
+        assert window.grab().save(str(ppt_preview_path))
+
+        current_index = window.state.current_page
+        window.set_ppt_view_mode("slideshow")
+        app.processEvents()
+        assert window.content_stack.currentWidget() is window.workspace
+        ppt_slideshow_path = OUTPUT / f"ppt-slideshow-{width}x{height}.png"
+        assert window.grab().save(str(ppt_slideshow_path))
+        window.set_ppt_view_mode("preview")
+        assert window.state.current_page == current_index
+
         window.toggle_workspace_mode()
         QTest.qWait(850)
         app.processEvents()
@@ -106,7 +122,8 @@ def main() -> int:
         print(
             "VISUAL_OK",
             empty_path,
-            ppt_mode_path,
+            ppt_preview_path,
+            ppt_slideshow_path,
             gesture_chrome_path,
             gesture_hidden_path,
             gesture_stage_path,

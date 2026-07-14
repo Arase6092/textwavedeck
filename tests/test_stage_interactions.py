@@ -8,7 +8,7 @@ from PIL import Image
 from PySide6.QtCore import QAbstractAnimation, QPoint, QPointF, QRectF, Qt
 from PySide6.QtGui import QKeySequence, QPixmap, QWheelEvent
 from PySide6.QtTest import QSignalSpy, QTest
-from PySide6.QtWidgets import QApplication, QSplitter, QToolBar
+from PySide6.QtWidgets import QApplication, QListWidget, QSplitter, QToolBar
 
 from app.main_window import MainWindow
 from app.theme import STAGE_GRADIENT_BOTTOM, STAGE_GRADIENT_CENTER, STAGE_GRADIENT_TOP
@@ -252,6 +252,16 @@ def test_thumbnail_panel_can_select_page_without_reemitting(qapp, pages):
     assert selected.count() == 0
 
 
+def test_thumbnail_panel_keeps_page_numbers_visible(qapp, pages):
+    """缩略图和两位页码应同时容纳在预览栏内。"""
+    panel = ThumbnailPanel()
+    panel.set_pages(pages)
+
+    assert panel.iconSize().width() <= 168
+    assert panel.viewMode() == QListWidget.ViewMode.IconMode
+    assert panel.item(2).text() == "03"
+
+
 def test_preview_workspace_builds_normal_view_and_exposes_import(qapp, pages):
     """预览工作区包含缩略图、只读主页面和明确导入入口。"""
     from widgets.ppt_preview_workspace import PptPreviewWorkspace
@@ -291,6 +301,23 @@ def test_preview_workspace_emits_user_page_and_slideshow_requests(qapp, pages):
     assert page_spy.count() == 1
     assert page_spy.at(0) == [2]
     assert slideshow_spy.count() == 1
+    preview.close()
+
+
+def test_preview_layout_keeps_thumbnail_pane_bounded(qapp, pages):
+    """较小桌面窗口仍应保留稳定缩略图宽度和足够的主页面空间。"""
+    from widgets.ppt_preview_workspace import PptPreviewWorkspace
+
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    preview = PptPreviewWorkspace()
+    preview.resize(1024, 768)
+    preview.set_project(project, current_index=0)
+    preview.show()
+    qapp.processEvents()
+
+    thumbnail_width = preview.thumbnail_panel.width()
+    assert preview.MIN_THUMBNAIL_WIDTH <= thumbnail_width <= preview.MAX_THUMBNAIL_WIDTH
+    assert preview.viewer.viewport().width() > thumbnail_width * 2
     preview.close()
 
 
