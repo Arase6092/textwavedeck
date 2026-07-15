@@ -1,106 +1,183 @@
-# Gesture PPT 第一阶段
+# WaveDeck - Control Your Slides in the Air
 
-这是一个 Windows 桌面 PPT 浏览与放映器。程序使用 Microsoft PowerPoint COM 将 `.ppt` / `.pptx` 按原始比例导出为接近 4K 的 PNG，默认进入带左侧缩略图的只读 PPT 预览模式；双击中央页面进入纯页面放映。按 `Ctrl+Alt+M` 可切换到黑匣子暗场中的五页圆柱滚筒手势模式，再按一次返回最近使用的 PPT 子模式。
+[![Release](https://img.shields.io/github/v/release/LLK-LL/textwavedeck?display_name=tag)](https://github.com/LLK-LL/textwavedeck/releases)
+[![Stars](https://img.shields.io/github/stars/LLK-LL/textwavedeck?style=social)](https://github.com/LLK-LL/textwavedeck/stargazers)
+[![License](https://img.shields.io/github/license/LLK-LL/textwavedeck)](https://github.com/LLK-LL/textwavedeck/blob/main/LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D6)](https://github.com/LLK-LL/textwavedeck)
+[![Python](https://img.shields.io/badge/python-3.11-3776AB)](https://www.python.org/)
 
-## 运行前提
+[中文说明](README.zh-CN.md) · [Release Notes](docs/release-v0.1.0.md) · [Privacy Notes](docs/security-and-privacy.md)
 
-- Windows 10/11 64 位
+WaveDeck is a local-first PowerPoint stage for Windows. It turns existing `.ppt` and `.pptx` files into crisp 4K slide images, a theatre-style preview wall, a distraction-free slideshow surface, and a gesture-ready navigation workspace.
+
+> Your deck stays local. The app does the heavy rendering once, caches it safely, and lets you move through slides like a presentation studio instead of a file viewer.
+
+![WaveDeck cover](docs/screenshots/wavedeck-cover.png)
+
+## What It Does
+
+- Imports existing PowerPoint decks without changing the source file.
+- Uses Microsoft PowerPoint COM for faithful PNG export.
+- Caches rendered slides locally for fast reopen.
+- Offers three presentation surfaces:
+  preview with thumbnails, full-slide slideshow, and a five-page theatre carousel.
+- Supports mouse, keyboard, fullscreen, zoom, pan, and page-jump workflows.
+- Keeps the rendering pipeline local and avoids uploading deck contents anywhere.
+
+## Why This Exists
+
+Most slide tools force a tradeoff:
+
+- PowerPoint gives fidelity, but the browsing experience feels heavy.
+- Image viewers feel fast, but they lose PowerPoint compatibility and context.
+- Camera-first gesture demos look flashy, but often ignore the deck-reading experience itself.
+
+WaveDeck starts from the opposite direction: make the slide stage feel premium first, then build gesture control on top of a clean local navigation core.
+
+## Before / After
+
+| Before | With WaveDeck |
+| --- | --- |
+| Reopen a large deck and wait for PowerPoint every time | Export once, reopen from validated local cache |
+| Jump between edit view and slideshow | Switch between preview, slideshow, and theatre carousel |
+| Thumbnail browsing feels cramped | Use a dedicated left rail plus a clean full-slide stage |
+| Presentation UI and media UI mix together | Keep a dark, focused stage around the original slide colors |
+
+## Screenshots
+
+The public screenshots focus on the slide experience only and intentionally exclude any camera feed.
+
+![PPT preview](docs/screenshots/ppt-preview.png)
+
+![Slideshow mode](docs/screenshots/ppt-slideshow.png)
+
+![Theatre carousel](docs/screenshots/gesture-carousel.png)
+
+![Single-slide stage](docs/screenshots/gesture-stage.png)
+
+![Import workflow](docs/screenshots/importing-state.png)
+
+## Core Highlights
+
+- Faithful PowerPoint export: slides are rendered through PowerPoint itself, not a best-effort parser.
+- 4K-ready cache: 16:9 decks export to `3840x2160`, 4:3 decks to `3840x2880`, with atomic cache replacement.
+- Dark theatre UI: the app keeps the slide untouched while surrounding it with a focused graphite-green stage.
+- Five-page cylinder carousel: the centered page stays dominant while nearby pages remain visible for spatial navigation.
+- Local-first privacy: no upload step, no PPT content logged, no forced cloud service.
+- Gesture-ready architecture: stage commands are already abstracted so the next interaction layer can target the same navigation core.
+
+## Quick Start
+
+### Requirements
+
+- Windows 10 or Windows 11
 - Python 3.11
-- Microsoft PowerPoint 2016 或更高版本
+- Microsoft PowerPoint 2016 or later
 
-## 安装与启动
+### Install
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
-启动手势控制PPT.cmd
 ```
 
-如果默认包源下载 PySide6 超时，可使用：
+If the default PyPI route is slow on your network:
 
 ```powershell
 .venv\Scripts\python.exe -m pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 ```
 
-也可以直接执行 `.venv\Scripts\python.exe main.py`。
-
-## 页面清晰度与缓存
-
-- 16:9 页面导出为 `3840×2160`。
-- 4:3 页面导出为 `3840×2880`。
-- 其他比例按 `3840px` 宽度计算高度，不拉伸页面。
-- 滚筒使用独立的 `640px` 宽 JPEG，单页舞台使用 4K PNG。
-- 缓存 schema 已升级到版本 2，旧 1080p 缓存会自动失效并重新导出。
-
-缓存位于 `%LOCALAPPDATA%\GesturePPT\projects\`，日志位于 `%LOCALAPPDATA%\GesturePPT\logs\gesture-ppt.log`。导出先写临时目录，完成校验后才替换正式缓存。
-
-## 操作
-
-### PPT 预览模式
-
-- 导入或恢复 PPT 后默认进入预览模式，左侧缩略图可直接选页。
-- 顶部“导入 PPT”按钮可随时打开其他演示文稿。
-- 中央页面保持原色并适应可用空间；单击不翻页。
-- 双击中央页面或点击顶部放映图标：从当前页进入放映模式。
-- `Ctrl+Alt+M`：从预览模式进入手势滚筒，再按一次返回预览。
-
-### PPT 放映模式
-
-- 放映模式只显示当前幻灯片，不常驻显示应用工具栏。
-- 16:9 页面在 16:9 窗口中贴合放映区域，其他比例保持原始比例并留黑边。
-- `N` / `PageDown` / `Right` / `Down` / `Enter` / `Space`：下一页。
-- `P` / `PageUp` / `Left` / `Up` / `Backspace`：上一页。
-- `Home` / `End`：第一页 / 最后一页。
-- 输入页码后按 `Enter`：跳转到指定页。
-- 鼠标左键单击：下一页。
-- 鼠标左键双击：返回预览模式，不触发翻页。
-- 鼠标滚轮向下 / 向上：下一页 / 上一页，不缩放页面。
-- `Esc`：返回预览模式；全屏时同时退出全屏。
-- `Ctrl+Alt+M`：进入手势模式。
-
-### 手势模式
-
-- 屏幕同时展示中央页和两级侧页共 5 页，侧页逐层压暗。
-- 左右拖动：旋转滚筒，松手后吸附到最近页面。
-- 快速拖动：保留短距离惯性，单次最多跨越 2 页。
-- 点击任意可见页面：直接进入该页的手势单页舞台。
-- 鼠标滚轮：按页旋转滚筒。
-- `Ctrl+Alt+M`：从滚筒或手势单页舞台返回最近使用的 PPT 预览/放映子模式。
-
-### 手势单页舞台
-
-- 适应窗口时左右拖动：上一页或下一页。
-- 页面放大后短距离或纵向拖动：平移画面。
-- 页面放大后长距离水平拖动：上一页或下一页。
-- 鼠标滚轮：缩放页面。
-- 双击页面：返回手势滚筒，并保持当前页。
-- `Esc`：非全屏时返回手势滚筒；全屏时先退出全屏。
-
-### 手势模式控制层
-
-- 顶部和底部控制层在停止操作约 2 秒后自动隐藏。
-- 鼠标靠近屏幕顶部或底部时，显示对应控制层。
-- 导入期间控制层保持可见，底部显示进度和取消操作。
-- 全屏模式同样通过屏幕边缘唤出控制层。
-- 需要减少动画时，可在启动前设置 `GESTURE_PPT_REDUCED_MOTION=1`；此模式关闭惯性和大幅过渡。
-
-### 键盘
-
-- `Ctrl+O`：打开 PPT
-- `Ctrl+Alt+M`：切换 PPT 模式 / 手势模式
-- `PageUp` / `Left` / `P`：上一页
-- `PageDown` / `Right` / `Space` / `N`：下一页
-- `Home` / `End`：第一页 / 最后一页
-- `F11`：进入或退出全屏
-
-## 集成测试
+### Launch
 
 ```powershell
-.venv\Scripts\python.exe tests\integration_powerpoint_smoke.py
+启动手势控制PPT.cmd
 ```
 
-测试会在 `D:\CodexCache` 创建临时的 16:9 与 4:3 PPT，验证 COM 导出像素、缩略图比例和缓存命中，结束后自动清理。
+Or:
 
-## 第一阶段边界
+```powershell
+.venv\Scripts\python.exe main.py
+```
 
-本阶段不包含摄像头、MediaPipe、手势识别、PPT 动画/音视频播放、编辑、批注和激光笔。第二阶段可将手势识别结果映射到现有的滚筒、翻页和视图命令。
+## Example Flow
+
+1. Open a `.ppt` or `.pptx` file.
+2. Let WaveDeck export the deck into a validated local cache.
+3. Review pages in preview mode with the thumbnail rail.
+4. Double-click into slideshow mode for a clean single-slide view.
+5. Press `Ctrl+Alt+M` to enter the theatre carousel and pick slides spatially.
+
+See [examples/quick-start.md](examples/quick-start.md) and [examples/presentation-modes.md](examples/presentation-modes.md) for a more guided walkthrough.
+
+## Keyboard And Interaction
+
+- `Ctrl+O`: open a PowerPoint file
+- `Ctrl+Alt+M`: switch between PPT mode and theatre mode
+- `PageDown`, `Right`, `Space`, `N`: next slide
+- `PageUp`, `Left`, `P`: previous slide
+- `Home`, `End`: first or last slide
+- `F11`: toggle fullscreen
+- `Esc`: leave fullscreen or return from stage to carousel
+- Mouse wheel in stage mode: zoom
+- Mouse drag in stage mode: pan or swipe between pages depending on context
+
+## Repository Layout
+
+```text
+app/        Main window, theme, workers, navigation bindings
+gesture/    Experimental gesture runtime and diagnostics
+models/     Slide project and page metadata
+ppt/        PowerPoint export, cache, and project persistence
+tests/      Unit tests plus Windows visual / COM smoke coverage
+widgets/    Preview workspace, carousel, stage viewer, overlays
+docs/       Release notes, privacy notes, architecture, screenshots
+examples/   Guided usage scenarios
+```
+
+## Safety And Privacy
+
+- Slide rendering happens on the local machine.
+- Source PPT contents are not written to logs.
+- Cache replacement is atomic to avoid corrupting a healthy export.
+- The app does not auto-install PowerPoint, Python, or third-party packages.
+
+Read the full notes in [docs/security-and-privacy.md](docs/security-and-privacy.md).
+
+## Project Status
+
+`v0.1.0` is the public launch release.
+
+What is stable now:
+
+- PowerPoint import and 4K export
+- Local cache validation
+- Preview, slideshow, carousel, and single-slide stage
+- Keyboard and mouse navigation
+- Fullscreen and reduced-motion support
+
+What is still evolving:
+
+- Gesture control defaults and ergonomics
+- Packaging beyond source checkout
+- More polished diagnostics and onboarding
+
+## Roadmap
+
+- Improve release packaging for non-developer users
+- Refine gesture controls without making camera visuals part of the default presentation UI
+- Add more sample decks and showcase workflows
+- Expand automated visual verification
+
+## Contributing
+
+Contributions are welcome, especially around Windows UX, PowerPoint fidelity, caching, testing, and packaging.
+
+Before opening a PR:
+
+- read [CONTRIBUTING.md](CONTRIBUTING.md)
+- avoid uploading private decks, secrets, or customer material
+- keep README and screenshot claims aligned with real behavior
+
+## One-Sentence Summary
+
+WaveDeck makes local PowerPoint decks feel like a presentation-native stage instead of a document you happen to scroll through.

@@ -5,8 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, Qt, Signal
-from PySide6.QtGui import QColor, QMouseEvent, QPixmap
-from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView
+from PySide6.QtGui import QBrush, QColor, QMouseEvent, QPen, QPixmap
+from PySide6.QtWidgets import (
+    QGraphicsEllipseItem,
+    QGraphicsItem,
+    QGraphicsPixmapItem,
+    QGraphicsScene,
+    QGraphicsView,
+)
 
 from app.theme import STAGE_BACKGROUND, STAGE_SAFE_MARGIN, stage_background_gradient
 
@@ -44,6 +50,7 @@ class SlideViewer(QGraphicsView):
         self._interaction_mode = "gesture"
         self._drag_start: QPoint | None = None
         self._press_point: QPoint | None = None
+        self._laser_pointer_item: QGraphicsEllipseItem | None = None
         self.setBackgroundBrush(QColor(STAGE_BACKGROUND))
         self.setFrameShape(QGraphicsView.Shape.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -56,6 +63,7 @@ class SlideViewer(QGraphicsView):
         """加载当前页图片，默认适应窗口。"""
         pixmap = QPixmap(str(Path(path)))
         self.scene().clear()
+        self._laser_pointer_item = None
         self._pixmap_item = self.scene().addPixmap(pixmap)
         self._pixmap_item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
         self.scene().setSceneRect(self._pixmap_item.boundingRect())
@@ -96,6 +104,77 @@ class SlideViewer(QGraphicsView):
         self._set_fit_mode(False)
         return self._zoom
 
+    def set_zoom_factor(self, value: float) -> float:
+        """按绝对比例缩放，供双手距离手势避免逐帧累计误差。"""
+        next_zoom = max(0.25, min(4.0, round(float(value), 2)))
+        if next_zoom == self._zoom:
+            return self._zoom
+        factor = next_zoom / max(0.01, self._zoom)
+        self.scale(factor, factor)
+        self._zoom = next_zoom
+        self._set_fit_mode(False)
+        return self._zoom
+
+    def pan_by_fraction(self, delta_x: float, delta_y: float) -> None:
+        """按视口比例平移页面，供掌心平移手势调用。"""
+        if self._pixmap_item is None:
+            return
+        pixel_x = int(delta_x * self.viewport().width())
+        pixel_y = int(delta_y * self.viewport().height())
+        if pixel_x == 0 and pixel_y == 0:
+            return
+        self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - pixel_x)
+        self.verticalScrollBar().setValue(self.verticalScrollBar().value() - pixel_y)
+        self._set_fit_mode(False)
+
+    def set_laser_pointer(self, x: float, y: float) -> None:
+        """在当前页上显示激光点。"""
+        if self._pixmap_item is None:
+            return
+        scene_rect = self.scene().sceneRect()
+        if scene_rect.isNull():
+            return
+        normalized_x = max(0.0, min(1.0, float(x)))
+        normalized_y = max(0.0, min(1.0, float(y)))
+        scene_x = scene_rect.left() + scene_rect.width() * normalized_x
+        scene_y = scene_rect.top() + scene_rect.height() * normalized_y
+        self._show_laser_pointer_at_scene_position(scene_x, scene_y)
+
+    def show_laser_pointer_at_viewport_center(self) -> tuple[float, float] | None:
+        """在当前可见视口的中心显示激光点，并返回对应页面坐标。"""
+        if self._pixmap_item is None:
+            return None
+        scene_rect = self.scene().sceneRect()
+        if scene_rect.isNull():
+            return None
+        center = self.mapToScene(self.viewport().rect().center())
+        self._show_laser_pointer_at_scene_position(center.x(), center.y())
+        return (
+            (center.x() - scene_rect.left()) / scene_rect.width(),
+            (center.y() - scene_rect.top()) / scene_rect.height(),
+        )
+
+    def _show_laser_pointer_at_scene_position(self, scene_x: float, scene_y: float) -> None:
+        """在指定场景坐标显示激光点。"""
+        item = self._laser_pointer_item
+        if item is None:
+            item = QGraphicsEllipseItem()
+            item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations, True)
+            item.setZValue(10_000)
+            item.setPen(QPen(QColor(255, 255, 255, 220), 1.5))
+            item.setBrush(QBrush(QColor(255, 52, 52, 220)))
+            self.scene().addItem(item)
+            self._laser_pointer_item = item
+        radius = 9.0
+        item.setRect(-radius, -radius, radius * 2, radius * 2)
+        item.setPos(scene_x, scene_y)
+        item.show()
+
+    def clear_laser_pointer(self) -> None:
+        """隐藏激光点。"""
+        if self._laser_pointer_item is not None:
+            self._laser_pointer_item.hide()
+
     @property
     def is_fit_mode(self) -> bool:
         """返回当前是否处于适应窗口状态。"""
@@ -128,6 +207,8 @@ class SlideViewer(QGraphicsView):
         self._interaction_mode = mode
         self._drag_start = None
         self._press_point = None
+        if mode != "gesture":
+            self.clear_laser_pointer()
 
     def _set_fit_mode(self, value: bool) -> None:
         if self._fit_mode != value:

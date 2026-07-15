@@ -28,9 +28,13 @@ from PySide6.QtWidgets import (
 from app.commands import NavigationState
 from app.theme import STAGE_SAFE_MARGIN, application_stylesheet, line_icon, reduced_motion_enabled
 from app.workers import ImportWorker
+from gesture.controller import GestureController
+from gesture.diagnostics import GestureRuntimeDiagnostics, diagnostics_enabled
+from gesture.settings import GestureSettings
 from models.slide_project import SlideProject
 from ppt.importer import PPTImporter
 from ppt.project_store import project_dir, save_project
+from widgets.camera_overlay import CameraPreviewWindow
 from widgets.ppt_preview_workspace import PptPreviewWorkspace
 from widgets.stage_chrome import StageChrome
 from widgets.stage_workspace import StageWorkspace
@@ -54,7 +58,24 @@ class MainWindow(QMainWindow):
         self._ppt_view_mode = "preview"
         self._slideshow_click_origin: int | None = None
         self._slide_number_buffer = ""
+        self.gesture_settings = GestureSettings()
+        self.gesture_controller = GestureController(self, self.gesture_settings)
+        self.gesture_controller.status_changed.connect(self._on_gesture_status_changed)
+        self.camera_preview = CameraPreviewWindow(self.gesture_settings)
+        self.gesture_controller.status_changed.connect(
+            self.camera_preview.set_gesture_control_status
+        )
+        self.gesture_controller.action_changed.connect(self.camera_preview.set_current_action)
+        self.camera_preview.hands_ready.connect(self.gesture_controller.process_hands)
+        self.camera_preview.status_changed.connect(self._on_gesture_status_changed)
         self._build_ui()
+        self.gesture_diagnostics = GestureRuntimeDiagnostics(
+            self,
+            self.camera_preview,
+            self.gesture_controller,
+        )
+        if diagnostics_enabled():
+            self.gesture_diagnostics.start()
         self._restore_last_project()
 
     @property
@@ -360,6 +381,7 @@ class MainWindow(QMainWindow):
         self.preview_workspace.set_status(status)
         self._update_counter()
         self._apply_mode_chrome()
+        self.camera_preview.prewarm_camera()
 
     def _on_import_failed(self, message: str) -> None:
         self.status_label.setText("导入失败")
@@ -390,6 +412,18 @@ class MainWindow(QMainWindow):
         if self.project:
             self.state.zoom = self.workspace.change_zoom(delta)
             self._update_counter()
+
+    def set_zoom_factor(self, value: float) -> None:
+        """设置绝对缩放比例，供双手缩放手势调用。"""
+        if self.project:
+            zoom = self.workspace.set_zoom_factor(value)
+            self.state.zoom = zoom
+            self._update_counter()
+
+    def pan_page(self, delta_x: float, delta_y: float) -> None:
+        """按手掌平移量移动当前单页舞台。"""
+        if self.project:
+            self.workspace.pan_page(delta_x, delta_y)
 
     def fit_view(self) -> None:
         if self.project:
@@ -437,8 +471,10 @@ class MainWindow(QMainWindow):
             self._presentation_mode = "gesture"
             self.content_stack.setCurrentWidget(self.workspace)
             self.workspace.show_carousel()
+            self._set_gesture_runtime_enabled(True)
             return
         self._presentation_mode = "ppt"
+        self._set_gesture_runtime_enabled(False)
         if self.workspace.mode == "carousel":
             self.workspace.enter_stage(self.workspace.current_index)
         else:
@@ -503,6 +539,18 @@ class MainWindow(QMainWindow):
             return
         self.chrome.set_suppressed(False)
         self.chrome.reveal_all()
+
+    def _set_gesture_runtime_enabled(self, enabled: bool) -> None:
+        """进入手势模式显示热启动摄像头，退出时隐藏但保温。"""
+        self.gesture_controller.set_enabled(enabled)
+        if enabled:
+            self.camera_preview.start_camera()
+        else:
+            self.camera_preview.hide_preview_keep_warm()
+
+    def _on_gesture_status_changed(self, message: str) -> None:
+        if self._presentation_mode == "gesture" and not self._importing:
+            self.status_label.setText(message)
 
     def _on_workspace_zoom_changed(self, zoom: float) -> None:
         self.state.zoom = zoom
@@ -625,6 +673,9 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:  # noqa: N802
         """保存当前页并停止线程、计时器和动画。"""
+        self.gesture_diagnostics.stop()
+        self.gesture_controller.set_enabled(False)
+        self.camera_preview.stop_camera()
         self.chrome.dispose()
         if self.worker and self.worker.isRunning():
             self.worker.cancel()

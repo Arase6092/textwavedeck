@@ -172,6 +172,24 @@ def test_zoomed_viewer_horizontal_drag_requests_next_page(qapp, pages):
     viewer.close()
 
 
+def test_repeated_gesture_zoom_in_same_percent_does_not_redraw_stage(qapp, pages):
+    workspace = StageWorkspace()
+    workspace.viewer.show_image(pages[0].image_path)
+    workspace._mode = "stage"
+    zoom_spy = QSignalSpy(workspace.zoom_changed)
+
+    for _ in range(100):
+        workspace.set_zoom_factor(1.004)
+
+    assert workspace.zoom_factor == pytest.approx(1.0)
+    assert zoom_spy.count() == 0
+
+    workspace.set_zoom_factor(1.02)
+    assert workspace.zoom_factor == pytest.approx(1.02)
+    assert zoom_spy.count() == 1
+    workspace.close()
+
+
 def test_viewer_fit_keeps_dark_stage_margin(qapp, pages):
     viewer = SlideViewer()
     viewer.resize(800, 600)
@@ -183,6 +201,48 @@ def test_viewer_fit_keeps_dark_stage_margin(qapp, pages):
     assert bounds.right() <= viewer.viewport().width() - 30
     assert bounds.top() >= 30
     assert bounds.bottom() <= viewer.viewport().height() - 30
+    viewer.close()
+
+
+def test_viewer_laser_pointer_tracks_normalized_slide_position(qapp, pages):
+    viewer = SlideViewer()
+    viewer.resize(800, 600)
+    viewer.show()
+    viewer.show_image(pages[0].image_path)
+
+    viewer.set_laser_pointer(0.5, 0.5)
+
+    item = viewer._laser_pointer_item
+    assert item is not None
+    assert item.isVisible()
+    assert item.pos().x() == pytest.approx(320.0)
+    assert item.pos().y() == pytest.approx(180.0)
+
+    viewer.clear_laser_pointer()
+    assert not item.isVisible()
+    viewer.close()
+
+
+def test_viewer_laser_pointer_can_start_at_current_viewport_center(qapp, pages):
+    viewer = SlideViewer()
+    viewer.resize(800, 600)
+    viewer.show()
+    viewer.show_image(pages[0].image_path)
+    viewer.set_zoom_factor(2.0)
+    viewer.pan_by_fraction(0.16, -0.12)
+    qapp.processEvents()
+
+    expected_center = viewer.mapToScene(viewer.viewport().rect().center())
+    normalized_center = viewer.show_laser_pointer_at_viewport_center()
+
+    item = viewer._laser_pointer_item
+    assert item is not None
+    assert item.pos().x() == pytest.approx(expected_center.x())
+    assert item.pos().y() == pytest.approx(expected_center.y())
+    assert normalized_center == pytest.approx((
+        expected_center.x() / viewer.scene().sceneRect().width(),
+        expected_center.y() / viewer.scene().sceneRect().height(),
+    ))
     viewer.close()
 
 
@@ -389,6 +449,30 @@ def test_main_window_import_defaults_to_ppt_preview_mode(qapp, monkeypatch, tmp_
     window.close()
 
 
+def test_import_prewarms_camera_and_gesture_entry_reuses_warm_runtime(
+    qapp,
+    monkeypatch,
+    tmp_path,
+    pages,
+):
+    """导入完成后预热摄像头，进入手势模式只显示已有运行时。"""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    calls = []
+    monkeypatch.setattr(window.camera_preview, "prewarm_camera", lambda: calls.append("prewarm"))
+    monkeypatch.setattr(window.camera_preview, "start_camera", lambda: calls.append("show"))
+    monkeypatch.setattr(window.camera_preview, "hide_preview_keep_warm", lambda: calls.append("hide"))
+    window.show()
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+
+    window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    window.toggle_presentation_mode_action.trigger()
+    window.toggle_presentation_mode_action.trigger()
+
+    assert calls == ["prewarm", "show", "hide"]
+    window.close()
+
+
 def test_preview_and_slideshow_double_click_toggle_without_page_change(qapp, monkeypatch, tmp_path, pages):
     """中央页双击双向切换预览和放映，并保持当前页。"""
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
@@ -480,6 +564,56 @@ def test_gesture_mode_carousel_page_opens_requested_stage(qapp, monkeypatch, tmp
     assert window.zoom_in_action.isEnabled()
     assert all(not widget.isHidden() for widget in window.zoom_widgets)
     assert not window.top_bar.isHidden()
+    window.close()
+
+
+def test_gesture_landmarks_drive_page_and_zoom_only_in_gesture_mode(
+    qapp,
+    monkeypatch,
+    tmp_path,
+    pages,
+):
+    """关键点命令应更新真实工作区，退出手势模式后立即停止。"""
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    window = MainWindow()
+    window.show()
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    window._on_import_completed(SimpleNamespace(project=project, cache_hit=False))
+    window.toggle_presentation_mode_action.trigger()
+    window.workspace.carousel.activate_page(0)
+    qapp.processEvents()
+
+    def open_hand(x, y=0.5):
+        hand = [(x, y, 0.0) for _ in range(21)]
+        for index, dx in ((5, -0.04), (9, 0.0), (13, 0.04), (17, 0.08)):
+            hand[index] = (x + dx, y, 0.0)
+        for tip, pip, dx in ((8, 6, -0.04), (12, 10, 0.0), (16, 14, 0.04), (20, 18, 0.08)):
+            hand[pip] = (x + dx, y - 0.05, 0.0)
+            hand[tip] = (x + dx, y - 0.16, 0.0)
+        hand[4] = (x - 0.12, y - 0.04, 0.0)
+        return hand
+
+    for frame_index, timestamp in enumerate((0, 50, 100)):
+        window.gesture_controller.process_hands(
+            [open_hand(0.65 - frame_index * 0.05)],
+            timestamp,
+        )
+    assert window.workspace.current_index == 1
+
+    zoom_before = window.workspace.zoom_factor
+    window.gesture_controller.process_hands([open_hand(0.35), open_hand(0.65)], 600)
+    window.gesture_controller.process_hands([open_hand(0.35), open_hand(0.65)], 780)
+    window.gesture_controller.process_hands([open_hand(0.33), open_hand(0.67)], 830)
+    assert window.workspace.zoom_factor > zoom_before
+
+    window.toggle_presentation_mode_action.trigger()
+    for frame_index, timestamp in enumerate((1000, 1050, 1100)):
+        window.gesture_controller.process_hands(
+            [open_hand(0.65 - frame_index * 0.05)],
+            timestamp,
+        )
+    assert window.presentation_mode == "ppt"
+    assert window.workspace.current_index == 1
     window.close()
 
 
@@ -729,6 +863,44 @@ def test_workspace_navigation_does_not_wrap(qapp, pages):
     assert not workspace.previous_page()
     assert workspace.next_page()
     assert workspace.current_index == 1
+
+
+def test_gesture_stage_navigation_uses_push_transition(qapp, pages):
+    """手势单页左右翻页应播放 Push 转场。"""
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    workspace = StageWorkspace()
+    workspace.resize(1200, 720)
+    workspace.set_project(project, current_index=0, initial_mode="stage")
+    workspace.viewer.set_interaction_mode("gesture")
+    workspace.show()
+    qapp.processEvents()
+
+    assert workspace.next_page()
+
+    assert workspace.current_index == 1
+    assert workspace._page_overlay.isVisible()
+    assert workspace._page_overlay.direction == "next"
+    assert workspace._page_transition.state() == QAbstractAnimation.State.Running
+    workspace._page_transition.stop()
+    workspace._finish_page_transition()
+    workspace.close()
+
+
+def test_ppt_slideshow_navigation_skips_gesture_push_transition(qapp, pages):
+    """PPT 放映翻页不能被手势 Push 转场接管。"""
+    project = SlideProject("source.pptx", "key", 1, 1.0, pages=pages)
+    workspace = StageWorkspace()
+    workspace.set_project(project, current_index=0, initial_mode="stage")
+    workspace.viewer.set_interaction_mode("slideshow")
+    workspace.show()
+    qapp.processEvents()
+
+    assert workspace.next_page()
+
+    assert workspace.current_index == 1
+    assert not workspace._page_overlay.isVisible()
+    assert workspace._page_transition.state() == QAbstractAnimation.State.Stopped
+    workspace.close()
 
 
 def test_main_window_keeps_sidebar_in_preview_only(qapp, monkeypatch, tmp_path):

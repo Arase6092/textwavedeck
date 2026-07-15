@@ -45,6 +45,11 @@ class NavigationState:
         self.zoom = max(0.25, min(4.0, round(self.zoom + delta, 2)))
         return self.zoom
 
+    def set_zoom_factor(self, value: float) -> float:
+        """设置绝对缩放值并限制在 25% 到 400%。"""
+        self.zoom = max(0.25, min(4.0, round(float(value), 2)))
+        return self.zoom
+
     def reset_zoom(self) -> None:
         """重置为 100%。"""
         self.zoom = 1.0

@@ -16,5 +16,7 @@ def test_zoom_is_clamped_and_reset():
     state = NavigationState(zoom=1.0)
     assert state.change_zoom(-10) == 0.25
     assert state.change_zoom(10) == 4.0
+    assert state.set_zoom_factor(2.345) == 2.35
+    assert state.set_zoom_factor(10) == 4.0
     state.reset_zoom()
     assert state.zoom == 1.0
