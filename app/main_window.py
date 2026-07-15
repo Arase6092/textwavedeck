@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from app.commands import NavigationState
 from app.theme import STAGE_SAFE_MARGIN, application_stylesheet, line_icon, reduced_motion_enabled
+from app.runtime_paths import bundle_path
 from app.workers import ImportWorker
 from gesture.controller import GestureController
 from gesture.diagnostics import GestureRuntimeDiagnostics, diagnostics_enabled
@@ -45,7 +46,10 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Gesture PPT · 页面舞台")
+        self.setWindowTitle("WaveDeck · Slide Stage")
+        icon_path = bundle_path("resources", "branding", "wavedeck.ico")
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
         self.resize(1440, 900)
         self.setMinimumSize(980, 620)
         self.state = NavigationState()
@@ -696,7 +700,10 @@ class MainWindow(QMainWindow):
 def run_application() -> int:
     """创建 Qt 应用并运行事件循环。"""
     app = QApplication.instance() or QApplication([])
-    app.setApplicationName("Gesture PPT")
+    app.setApplicationName("WaveDeck")
+    icon_path = bundle_path("resources", "branding", "wavedeck.ico")
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
     window = MainWindow()
     window.show()
     return app.exec()

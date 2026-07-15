@@ -1,18 +1,34 @@
 # WaveDeck - Control Your Slides in the Air
 
 [![Release](https://img.shields.io/github/v/release/LLK-LL/textwavedeck?display_name=tag)](https://github.com/LLK-LL/textwavedeck/releases)
+[![Download](https://img.shields.io/badge/download-Windows%20build-3B6FFF)](https://github.com/LLK-LL/textwavedeck/releases/download/v0.1.0/WaveDeck-v0.1.0-windows-x64.zip)
 [![Stars](https://img.shields.io/github/stars/LLK-LL/textwavedeck?style=social)](https://github.com/LLK-LL/textwavedeck/stargazers)
 [![License](https://img.shields.io/github/license/LLK-LL/textwavedeck)](https://github.com/LLK-LL/textwavedeck/blob/main/LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D6)](https://github.com/LLK-LL/textwavedeck)
 [![Python](https://img.shields.io/badge/python-3.11-3776AB)](https://www.python.org/)
 
-[中文说明](README.zh-CN.md) · [Release Notes](docs/release-v0.1.0.md) · [Privacy Notes](docs/security-and-privacy.md)
+[中文说明](README.zh-CN.md) · [Download For Windows](https://github.com/LLK-LL/textwavedeck/releases/download/v0.1.0/WaveDeck-v0.1.0-windows-x64.zip) · [All Releases](https://github.com/LLK-LL/textwavedeck/releases) · [Release Notes](docs/release-v0.1.0.md) · [Privacy Notes](docs/security-and-privacy.md)
 
 WaveDeck is a local-first PowerPoint stage for Windows. It turns existing `.ppt` and `.pptx` files into crisp 4K slide images, a theatre-style preview wall, a distraction-free slideshow surface, and a gesture-ready navigation workspace.
 
 > Your deck stays local. The app does the heavy rendering once, caches it safely, and lets you move through slides like a presentation studio instead of a file viewer.
 
 ![WaveDeck cover](docs/screenshots/wavedeck-cover.png)
+
+## Download
+
+Want the fastest way to try it?
+
+- Download the ready-to-run Windows package: [WaveDeck-v0.1.0-windows-x64.zip](https://github.com/LLK-LL/textwavedeck/releases/download/v0.1.0/WaveDeck-v0.1.0-windows-x64.zip)
+- Requires Microsoft PowerPoint on the target machine
+- No Python install needed for the packaged build
+
+## Why People Star It
+
+- It makes existing PowerPoint decks feel faster without asking you to rebuild them.
+- It keeps the original slide colors intact while dramatically improving browsing flow.
+- It gives you three distinct presentation surfaces instead of one overloaded screen.
+- It is local-first, privacy-aware, and ready for gesture-driven workflows without forcing camera UI into the default showcase.
 
 ## What It Does
 
@@ -66,6 +82,12 @@ The public screenshots focus on the slide experience only and intentionally excl
 - Local-first privacy: no upload step, no PPT content logged, no forced cloud service.
 - Gesture-ready architecture: stage commands are already abstracted so the next interaction layer can target the same navigation core.
 
+## Who It Is For
+
+- Presenters who revisit the same large deck again and again
+- Researchers, consultants, and educators who need quick page context
+- Developers exploring gesture-based presentation workflows on top of a real Windows deck pipeline
+
 ## Quick Start
 
 ### Requirements
@@ -74,7 +96,15 @@ The public screenshots focus on the slide experience only and intentionally excl
 - Python 3.11
 - Microsoft PowerPoint 2016 or later
 
-### Install
+### Option A: Download The Packaged Build
+
+1. Download [WaveDeck-v0.1.0-windows-x64.zip](https://github.com/LLK-LL/textwavedeck/releases/download/v0.1.0/WaveDeck-v0.1.0-windows-x64.zip)
+2. Extract the zip
+3. Launch `WaveDeck.exe` or `Launch-WaveDeck.cmd`
+
+### Option B: Run From Source
+
+Install:
 
 ```powershell
 python -m venv .venv
@@ -87,7 +117,7 @@ If the default PyPI route is slow on your network:
 .venv\Scripts\python.exe -m pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 ```
 
-### Launch
+Launch:
 
 ```powershell
 启动手势控制PPT.cmd
@@ -108,6 +138,13 @@ Or:
 5. Press `Ctrl+Alt+M` to enter the theatre carousel and pick slides spatially.
 
 See [examples/quick-start.md](examples/quick-start.md) and [examples/presentation-modes.md](examples/presentation-modes.md) for a more guided walkthrough.
+
+## Supported Use Cases
+
+- Browse a cached deck without reopening full PowerPoint edit mode
+- Review dense slides with zoom and pan on a clean stage
+- Jump visually between neighboring slides in the theatre carousel
+- Keep a Windows-native slide workflow local and offline
 
 ## Keyboard And Interaction
 
@@ -132,6 +169,7 @@ tests/      Unit tests plus Windows visual / COM smoke coverage
 widgets/    Preview workspace, carousel, stage viewer, overlays
 docs/       Release notes, privacy notes, architecture, screenshots
 examples/   Guided usage scenarios
+scripts/    Build and packaging helpers
 ```
 
 ## Safety And Privacy
@@ -142,6 +180,7 @@ examples/   Guided usage scenarios
 - The app does not auto-install PowerPoint, Python, or third-party packages.
 
 Read the full notes in [docs/security-and-privacy.md](docs/security-and-privacy.md).
+The package layout is documented in [docs/windows-package.md](docs/windows-package.md).
 
 ## Project Status
 
@@ -158,7 +197,6 @@ What is stable now:
 What is still evolving:
 
 - Gesture control defaults and ergonomics
-- Packaging beyond source checkout
 - More polished diagnostics and onboarding
 
 ## Roadmap

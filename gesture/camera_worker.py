@@ -12,6 +12,7 @@ from typing import Any
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtGui import QImage
 
+from app.runtime_paths import bundle_path
 from gesture.hand_landmarks import HandLandmarks
 from gesture.settings import GestureSettings
 
@@ -343,7 +344,7 @@ def _connection_indices(connection: Any) -> tuple[int, int]:
 
 def _hand_landmarker_model_path() -> Path:
     """返回随项目发布的 Hand Landmarker 模型路径。"""
-    return Path(__file__).resolve().parents[1] / "resources" / "models" / "hand_landmarker.task"
+    return bundle_path("resources", "models", "hand_landmarker.task")
 
 
 class _LegacyHandsDetector:

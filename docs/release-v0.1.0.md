@@ -11,6 +11,7 @@
 - Single-slide stage with zoom and pan
 - Keyboard shortcuts, fullscreen, and reduced-motion support
 - Chinese in-app status, warnings, and logs
+- Windows packaged build asset for download
 
 ## Who Should Try It
 
@@ -22,8 +23,12 @@
 
 - Windows only
 - Microsoft PowerPoint is required
-- Source release only in `v0.1.0`
+- The packaged build is unsigned
 - Gesture runtime is still evolving and is not the focus of the public screenshots
+
+## Release Asset
+
+- `WaveDeck-v0.1.0-windows-x64.zip`
 
 ## Suggested Repository Description
 
