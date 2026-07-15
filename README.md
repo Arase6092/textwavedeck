@@ -1,4 +1,4 @@
-# WaveDeck - Control Your Slides in the Air
+# WaveDeck - Control Your PPT in the Air
 
 [![Release](https://img.shields.io/github/v/release/LLK-LL/textwavedeck?display_name=tag)](https://github.com/LLK-LL/textwavedeck/releases)
 [![Download](https://img.shields.io/badge/download-Windows%20build-3B6FFF)](https://github.com/LLK-LL/textwavedeck/releases/download/v0.1.0/WaveDeck-v0.1.0-windows-x64.zip)
