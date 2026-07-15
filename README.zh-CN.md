@@ -1,6 +1,6 @@
 # WaveDeck - Control Your Slides in the Air
 
-[English README](README.md) · [Windows 下载包](https://github.com/LLK-LL/textwavedeck/releases/download/v0.1.0/WaveDeck-v0.1.0-windows-x64.zip) · [全部 Releases](https://github.com/LLK-LL/textwavedeck/releases) · [Release Notes](docs/release-v0.1.0.md) · [隐私说明](docs/security-and-privacy.md)
+[English README](README.md) · [Windows 下载包](https://github.com/LLK-LL/textwavedeck/releases/download/v0.1.0/WaveDeck-v0.1.0-windows-x64.zip) · [模式与手势说明](docs/gesture-controls.zh-CN.md) · [英文手势说明](docs/gesture-controls.md) · [全部 Releases](https://github.com/LLK-LL/textwavedeck/releases) · [Release Notes](docs/release-v0.1.0.md) · [隐私说明](docs/security-and-privacy.md)
 
 WaveDeck 是一个面向 Windows 的本地优先 PPT 演示舞台。它把现成的 `.ppt` / `.pptx` 转成清晰的 4K 页面缓存，提供缩略图预览、纯净放映和黑匣子剧场式滚筒选页体验，并为后续手势控制保留了统一的导航命令层。
 
@@ -150,6 +150,8 @@ python -m venv .venv
 - `Esc`：退出全屏，或从单页舞台回到滚筒
 - 单页舞台滚轮：缩放
 - 单页舞台拖动：平移或切页
+
+更完整的公开控制说明，包括模式切换和手势映射总表，见 [docs/gesture-controls.zh-CN.md](docs/gesture-controls.zh-CN.md)。
 
 ## 目录结构
 

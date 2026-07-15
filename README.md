@@ -7,7 +7,7 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D6)](https://github.com/LLK-LL/textwavedeck)
 [![Python](https://img.shields.io/badge/python-3.11-3776AB)](https://www.python.org/)
 
-[中文说明](README.zh-CN.md) · [Download For Windows](https://github.com/LLK-LL/textwavedeck/releases/download/v0.1.0/WaveDeck-v0.1.0-windows-x64.zip) · [All Releases](https://github.com/LLK-LL/textwavedeck/releases) · [Release Notes](docs/release-v0.1.0.md) · [Privacy Notes](docs/security-and-privacy.md)
+[中文说明](README.zh-CN.md) · [Download For Windows](https://github.com/LLK-LL/textwavedeck/releases/download/v0.1.0/WaveDeck-v0.1.0-windows-x64.zip) · [Modes and Gestures](docs/gesture-controls.md) · [中文手势说明](docs/gesture-controls.zh-CN.md) · [All Releases](https://github.com/LLK-LL/textwavedeck/releases) · [Release Notes](docs/release-v0.1.0.md) · [Privacy Notes](docs/security-and-privacy.md)
 
 WaveDeck is a local-first PowerPoint stage for Windows. It turns existing `.ppt` and `.pptx` files into crisp 4K slide images, a theatre-style preview wall, a distraction-free slideshow surface, and a gesture-ready navigation workspace.
 
@@ -157,6 +157,8 @@ See [examples/quick-start.md](examples/quick-start.md) and [examples/presentatio
 - `Esc`: leave fullscreen or return from stage to carousel
 - Mouse wheel in stage mode: zoom
 - Mouse drag in stage mode: pan or swipe between pages depending on context
+
+For the complete public control guide, including mode behavior and gesture mapping, see [docs/gesture-controls.md](docs/gesture-controls.md).
 
 ## Repository Layout
 
